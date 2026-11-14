@@ -317,7 +317,7 @@ function renderSync() {
 function render() { renderSmart(); renderSync(); renderFridge(); renderAdd(); renderMeals(); renderPlan(); renderFavs(); renderShop(); }
 
 function setTab(t) {
-  if (!['fridge', 'add', 'meals', 'shop'].includes(t)) t = 'fridge';
+  if (!['fridge', 'meals', 'add', 'recipes', 'shop'].includes(t)) t = 'fridge';
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === 's-' + t));
   document.querySelectorAll('#tabs button').forEach(b => { if (b.dataset.tab === t) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   if (location.hash !== '#' + t) location.hash = t;
@@ -621,7 +621,7 @@ function renderFavs() {
 }
 function renderPlan() {
   const on = S.mealView === 'plan';
-  $('#mealPlan').hidden = !on; $('#mealIdeas').hidden = S.mealView !== 'ideas'; $('#mealFavs').hidden = S.mealView !== 'favs';
+  $('#mealPlan').hidden = !on; $('#mealFavs').hidden = S.mealView !== 'favs';
   document.querySelectorAll('#mealTabs .chip').forEach(b => { b.setAttribute('aria-pressed', String(b.dataset.mview === S.mealView)); b.setAttribute('aria-selected', String(b.dataset.mview === S.mealView)); });
   if (!on) return;
   const keep = document.querySelector('form.padd input'), kept = keep ? keep.value : '';
@@ -778,7 +778,7 @@ document.addEventListener('click', async e => {
       const f = S.favs.find(x => x.id === id); if (!f) break;
       const pid = uid(), date = el.dataset.date, slot = S.favSlot; S.favPick = null;
       const ok = await act(() => api.addPlan({ id: pid, date, slot, title: f.title, ...(f.recipe ? { recipe: f.recipe } : {}) }));
-      if (ok) { const dt = new Date(date + 'T00:00:00'); toast(slot + ' planned for ' + dt.toLocaleDateString(undefined, { weekday: 'long' }), 'View plan', () => { S.mealView = 'plan'; const ws = new Date(dt); ws.setDate(ws.getDate() - ((ws.getDay() + 6) % 7)); S.weekOff = Math.round((ws - weekStart(0)) / (7 * 864e5)); render(); }); if (!f.recipe) genRecipe(pid); }
+      if (ok) { const dt = new Date(date + 'T00:00:00'); toast(slot + ' planned for ' + dt.toLocaleDateString(undefined, { weekday: 'long' }), 'View plan', () => { S.mealView = 'plan'; setTab('meals'); const ws = new Date(dt); ws.setDate(ws.getDate() - ((ws.getDay() + 6) % 7)); S.weekOff = Math.round((ws - weekStart(0)) / (7 * 864e5)); render(); }); if (!f.recipe) genRecipe(pid); }
       renderFavs(); break;
     }
     case 'planneeds': {
@@ -793,7 +793,7 @@ document.addEventListener('click', async e => {
       const rc = recipeFrom(r, S.mealHouse || S.house);
       S.planPick = null; renderMeals();
       const dt = new Date(el.dataset.date + 'T00:00:00');
-      if (await act(() => api.addPlan({ date: el.dataset.date, slot: 'Dinner', title: String(r.title).slice(0, 80), recipe: rc }))) toast('Planned for ' + dt.toLocaleDateString(undefined, { weekday: 'long' }), 'View plan', () => { S.mealView = 'plan'; const ws = new Date(dt); ws.setDate(ws.getDate() - ((ws.getDay() + 6) % 7)); S.weekOff = Math.round((ws - weekStart(0)) / (7 * 864e5)); render(); });
+      if (await act(() => api.addPlan({ date: el.dataset.date, slot: 'Dinner', title: String(r.title).slice(0, 80), recipe: rc }))) toast('Planned for ' + dt.toLocaleDateString(undefined, { weekday: 'long' }), 'View plan', () => { S.mealView = 'plan'; setTab('meals'); const ws = new Date(dt); ws.setDate(ws.getDate() - ((ws.getDay() + 6) % 7)); S.weekOff = Math.round((ws - weekStart(0)) / (7 * 864e5)); render(); });
       break;
     }
     case 'canceledit': endEdit(); setTab('fridge'); break;
