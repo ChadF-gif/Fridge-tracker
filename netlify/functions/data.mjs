@@ -1,0 +1,64 @@
+import { getStore } from '@netlify/blobs';
+
+const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+const clean = (s, n = 80) => String(s == null ? '' : s).slice(0, n);
+const num = (v, lo, hi, d) => { const x = Math.round(Number(v)); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : d; };
+
+function same(a, b) {
+  const x = Buffer.from(String(a)), y = Buffer.from(String(b));
+  if (x.length !== y.length) return false;
+  let r = 0; for (let i = 0; i < x.length; i++) r |= x[i] ^ y[i];
+  return r === 0;
+}
+const okItem = i => i && typeof i.id === 'string' && i.id.length <= 64 && /^\d{4}-\d{2}-\d{2}$/.test(i.exp || '');
+
+export default async (req) => {
+  const secret = process.env.HOUSEHOLD_CODE;
+  if (!secret) return json({ error: 'Server has no household code', code: 'not_configured' }, 503);
+  if (!same(req.headers.get('x-household-code') || '', secret)) return json({ error: 'Wrong code', code: 'unauthorized' }, 401);
+
+  const store = getStore({ name: 'chill', consistency: 'strong' });
+  const state = (await store.get('state', { type: 'json' })) || { items: [], shop: [], house: { adults: 2, kids: 0 } };
+  state.items = state.items || []; state.shop = state.shop || []; state.house = state.house || { adults: 2, kids: 0 };
+
+  if (req.method === 'GET') return json(state);
+  if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+
+  let b; try { b = await req.json(); } catch { return json({ error: 'Bad request' }, 400); }
+  switch (b.op) {
+    case 'addItem': {
+      const i = b.item; if (!okItem(i)) return json({ error: 'Bad item' }, 400);
+      if (state.items.length >= 500) return json({ error: 'Too many items' }, 400);
+      if (!state.items.some(x => x.id === i.id)) state.items.push({ id: i.id, name: clean(i.name), loc: ['Fridge', 'Freezer', 'Pantry'].includes(i.loc) ? i.loc : 'Fridge', exp: i.exp, qty: num(i.qty, 1, 99, 1), ts: num(i.ts, 0, 9e15, Date.now()) });
+      break;
+    }
+    case 'removeItem': state.items = state.items.filter(x => x.id !== b.id); break;
+    case 'updateItem': {
+      const f = b.fields || {};
+      state.items = state.items.map(x => {
+        if (x.id !== b.id) return x;
+        const n = { ...x };
+        if ('qty' in f) n.qty = num(f.qty, 1, 99, x.qty);
+        if ('name' in f) n.name = clean(f.name) || x.name;
+        if ('loc' in f && ['Fridge', 'Freezer', 'Pantry'].includes(f.loc)) n.loc = f.loc;
+        if ('exp' in f && /^\d{4}-\d{2}-\d{2}$/.test(f.exp)) n.exp = f.exp;
+        return n;
+      });
+      break;
+    }
+    case 'addShop': {
+      const s = b.shop; if (!s || typeof s.id !== 'string' || s.id.length > 64) return json({ error: 'Bad entry' }, 400);
+      if (state.shop.length >= 300) return json({ error: 'List is full' }, 400);
+      if (!state.shop.some(x => x.id === s.id)) state.shop.push({ id: s.id, text: clean(s.text), done: false, ts: num(s.ts, 0, 9e15, Date.now()) });
+      break;
+    }
+    case 'updateShop': state.shop = state.shop.map(x => x.id === b.id ? { ...x, done: !!(b.fields && b.fields.done) } : x); break;
+    case 'removeShop': state.shop = state.shop.filter(x => x.id !== b.id); break;
+    case 'setHouse': state.house = { adults: num(b.adults, 1, 12, 2), kids: num(b.kids, 0, 12, 0) }; break;
+    default: return json({ error: 'Unknown op' }, 400);
+  }
+  await store.setJSON('state', state);
+  return json({ ok: true });
+};
+
+export const config = { path: '/api/data' };

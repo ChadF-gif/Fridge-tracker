@@ -1,0 +1,29 @@
+// Local test server: serves /public and mocks /api with in-memory state.
+import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
+const state = { items: [], shop: [], house: { adults: 2, kids: 0 } };
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/json' };
+const recipe = n => JSON.stringify({ title: 'Test dinner ' + n, cuisine: 'Italian', minutes: 25, ingredients: [{ name: 'Chicken breasts', amount: '1.5 lb' }, { name: 'Basil', amount: '1/4 cup', buy: true }], steps: ['Season 1 tsp salt.', 'Bake 400F for 20 min.'] });
+http.createServer(async (req, res) => {
+  const u = new URL(req.url, 'http://x');
+  if (u.pathname.startsWith('/api/')) {
+    if (req.headers['x-household-code'] !== 'pizza') { res.writeHead(401, { 'content-type': 'application/json' }); return res.end('{"error":"Wrong code","code":"unauthorized"}'); }
+    let body = ''; for await (const c of req) body += c;
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (u.pathname === '/api/ai') return res.end(JSON.stringify({ text: recipe(Math.floor(Math.random() * 99)) }));
+    if (req.method === 'POST') {
+      const b = JSON.parse(body);
+      if (b.op === 'addItem') state.items.push(b.item);
+      if (b.op === 'removeItem') state.items = state.items.filter(x => x.id !== b.id);
+      if (b.op === 'updateItem') state.items = state.items.map(x => x.id === b.id ? { ...x, ...b.fields } : x);
+      if (b.op === 'addShop') state.shop.push(b.shop);
+      if (b.op === 'updateShop') state.shop = state.shop.map(x => x.id === b.id ? { ...x, ...b.fields } : x);
+      if (b.op === 'removeShop') state.shop = state.shop.filter(x => x.id !== b.id);
+      if (b.op === 'setHouse') state.house = { adults: b.adults, kids: b.kids };
+      return res.end('{"ok":true}');
+    }
+    return res.end(JSON.stringify(state));
+  }
+  let f = path.join('public', u.pathname === '/' ? 'index.html' : u.pathname);
+  if (!fs.existsSync(f)) { res.writeHead(404); return res.end(); }
+  res.writeHead(200, { 'content-type': types[path.extname(f)] || 'application/octet-stream' }); res.end(fs.readFileSync(f));
+}).listen(8899);

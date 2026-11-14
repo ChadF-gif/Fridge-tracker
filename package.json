@@ -1,0 +1,10 @@
+{
+  "name": "chill-fridge-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chill: a shared fridge tracker",
+  "type": "module",
+  "dependencies": {
+    "@netlify/blobs": "11.1.9"
+  }
+}
