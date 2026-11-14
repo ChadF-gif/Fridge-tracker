@@ -15,13 +15,14 @@ const CUISINES = ['Any', 'Italian', 'Mexican', 'Asian', 'American', 'Mediterrane
 const DIETS = ['Vegetarian', 'Vegan', 'Gluten-free', 'Dairy-free', 'Low-carb', 'Kid-friendly'];
 
 const S = { items: [], shop: [], filter: 'All', cat: 'All', q: '', addCat: 'Other', catAuto: true, addLoc: 'Fridge', qty: 1, ready: false, online: true, canWrite: true, canPhoto: true,
-  meals: null, house: { adults: 2, kids: 0 }, mealHouse: null, mealPrefs: '', mealNote: '', busy: false, err: '', enter: false, mealEnter: false,
+  plan: [], mealView: 'plan', weekOff: 0, addSlot: null, planPick: null, planBusy: false, meals: null, house: { adults: 2, kids: 0 }, mealHouse: null, mealPrefs: '', mealNote: '', busy: false, err: '', enter: false, mealEnter: false,
   cuisine: 'Any', diets: [], receipt: [], editId: null, expAuto: true, scanCode: null, reading: false, receiptBusy: false };
 
 function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 try { const p = JSON.parse(lsGet('chill-prefs')); if (p) { if (CUISINES.includes(p.cuisine)) S.cuisine = p.cuisine; if (Array.isArray(p.diets)) S.diets = p.diets.filter(x => DIETS.includes(x)); } } catch (e) {}
 const savePrefs = () => lsSet('chill-prefs', JSON.stringify({ cuisine: S.cuisine, diets: S.diets }));
+try { const v = lsGet('chill-mview'); if (v === 'plan' || v === 'ideas') S.mealView = v; } catch (e) {}
 let barcodes = {};
 try { barcodes = JSON.parse(lsGet('chill-barcodes')) || {}; } catch (e) {}
 const saveBarcodes = () => lsSet('chill-barcodes', JSON.stringify(barcodes));
@@ -95,6 +96,8 @@ const api = {
   addShop: async (text, sug) => { const s = { id: uid(), text, done: false, ts: Date.now() }; if (sug) s.sug = true; S.shop = S.shop.concat(s); render(); await send('addShop', { shop: s }); },
   toggleShop: async (id, done) => { S.shop = S.shop.map(s => s.id === id ? Object.assign({}, s, { done }) : s); render(); await send('updateShop', { id, fields: { done } }); },
   removeShop: async id => { S.shop = S.shop.filter(s => s.id !== id); render(); await send('removeShop', { id }); },
+  addPlan: async o => { const e = Object.assign({ id: uid(), ts: Date.now() }, o); S.plan = S.plan.concat(e); render(); await send('addPlan', { entry: e }); },
+  removePlan: async id => { S.plan = S.plan.filter(x => x.id !== id); render(); await send('removePlan', { id }); },
   setHouse: async h => { await send('setHouse', { adults: h.adults, kids: h.kids }); }
 };
 
@@ -105,6 +108,7 @@ function applyServer(d) {
   lastSig = sig;
   S.items = Array.isArray(d.items) ? d.items : [];
   S.shop = Array.isArray(d.shop) ? d.shop : [];
+  S.plan = Array.isArray(d.plan) ? d.plan : [];
   if (d.house && !pc.house) S.house = { adults: Math.max(1, Math.min(12, Math.round(Number(d.house.adults) || 2))), kids: Math.max(0, Math.min(12, Math.round(Number(d.house.kids) || 0))) };
   const first = !S.ready;
   S.ready = true; S.err = '';
@@ -278,7 +282,9 @@ function renderMeals() {
     return '<div class="card recipe" style="--i:' + n + '"><h3>' + esc(r.title) + '</h3><div class="meta">' + (r.cuisine ? esc(r.cuisine) + ' · ' : '') + esc(r.minutes) + ' min · for ' + esc(who) + '</div>' +
       '<h4>Ingredients</h4><ul class="ing">' + ing.map(x => '<li><b>' + esc(x.amount) + '</b><span>' + esc(x.name) + '</span>' + (x.buy ? '<em>Buy</em>' : '') + '</li>').join('') + '</ul>' +
       '<h4>Steps</h4><ol>' + (r.steps || []).map(st => '<li>' + esc(st) + '</li>').join('') + '</ol>' +
-      (buyList(r).length ? '<button class="btn ghost" data-act="needs" data-n="' + n + '">Add what I\'m missing to the list</button>' : '') + '</div>';
+      (buyList(r).length ? '<button class="btn ghost" data-act="needs" data-n="' + n + '">Add what I\'m missing to the list</button>' : '') +
+      '<button class="btn ghost" data-act="planpick" data-n="' + n + '">Add to meal plan</button>' +
+      (S.planPick === n ? '<div class="planpick"><span class="hint" style="min-height:0">Which night?</span><div class="chips wrap">' + [0,1,2,3,4,5,6].map(k => { const d = today0(); d.setDate(d.getDate() + k); return '<button type="button" class="chip" data-act="planit" data-n="' + n + '" data-date="' + iso(d) + '">' + (k === 0 ? 'Today' : d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })) + '</button>'; }).join('') + '</div></div>' : '') + '</div>';
   }).join('');
   box.classList.toggle('enter', S.mealEnter);
 }
@@ -302,7 +308,7 @@ function renderSync() {
   el.lastElementChild.textContent = !S.ready ? 'Loading' : S.online ? 'Shared and live' : 'Offline';
 }
 
-function render() { renderSmart(); renderSync(); renderFridge(); renderAdd(); renderMeals(); renderShop(); }
+function render() { renderSmart(); renderSync(); renderFridge(); renderAdd(); renderMeals(); renderPlan(); renderShop(); }
 
 function setTab(t) {
   if (!['fridge', 'add', 'meals', 'shop'].includes(t)) t = 'fridge';
@@ -544,6 +550,78 @@ $('#mealBtn').addEventListener('click', async () => {
   S.busy = false; renderMeals();
 });
 
+/* ---------- meal plan ---------- */
+const SLOTS = ['Breakfast', 'Lunch', 'Dinner'];
+function weekStart(off) { const d = today0(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + off * 7); return d; }
+function dayLabel(d) { return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); }
+function planEntryHtml(e) {
+  const rc = e.recipe, ing = rc && Array.isArray(rc.ingredients) ? rc.ingredients : [];
+  const head = '<div class="pe"><span class="pt">' + esc(e.title) + '</span>' + (e.sug ? '<em class="tag sug">Suggested</em>' : '') + '<button class="x" data-act="rmplan" data-id="' + esc(e.id) + '" aria-label="Remove ' + esc(e.title) + '">&times;</button></div>';
+  if (!rc || !ing.length) return head;
+  return head + '<details class="pr"><summary>Recipe' + (rc.minutes ? ' \u00b7 ' + esc(rc.minutes) + ' min' : '') + '</summary><div class="rb"><ul>' +
+    ing.map(x => '<li><b>' + esc(x.amount) + '</b> ' + esc(x.name) + '</li>').join('') + '</ul><ol>' + (rc.steps || []).map(t => '<li>' + esc(t) + '</li>').join('') + '</ol></div>' +
+    (buyList(rc).length ? '<button type="button" class="btn ghost" data-act="planneeds" data-id="' + esc(e.id) + '">Add what I\'m missing to the list</button>' : '') + '</details>';
+}
+function renderPlan() {
+  const on = S.mealView === 'plan';
+  $('#mealPlan').hidden = !on; $('#mealIdeas').hidden = on;
+  document.querySelectorAll('#mealTabs .chip').forEach(b => { b.setAttribute('aria-pressed', String(b.dataset.mview === S.mealView)); b.setAttribute('aria-selected', String(b.dataset.mview === S.mealView)); });
+  if (!on) return;
+  const keep = document.querySelector('form.padd input'), kept = keep ? keep.value : '';
+  const w0 = weekStart(S.weekOff), w6 = new Date(w0); w6.setDate(w6.getDate() + 6);
+  $('#weekLabel').textContent = dayLabel(w0) + ' \u2013 ' + dayLabel(w6);
+  $('#weekSub').textContent = S.weekOff === 0 ? 'This week' : S.weekOff === 1 ? 'Next week' : S.weekOff === -1 ? 'Last week' : '';
+  $('#planAi').disabled = S.planBusy; $('#planAi').textContent = S.planBusy ? 'Thinking\u2026' : 'Suggest dinners for my empty days';
+  const t = iso(today0());
+  let html = '';
+  for (let k = 0; k < 7; k++) {
+    const d = new Date(w0); d.setDate(d.getDate() + k); const ds = iso(d);
+    html += '<div class="day' + (ds === t ? ' today' : '') + (ds < t ? ' past' : '') + '"><h3>' + d.toLocaleDateString(undefined, { weekday: 'long' }) + '<em>' + dayLabel(d) + '</em>' + (ds === t ? '<span class="tag">Today</span>' : '') + '</h3>';
+    for (const sl of SLOTS) {
+      const es = S.plan.filter(e => e.date === ds && e.slot === sl).sort((a, b) => (a.ts || 0) - (b.ts || 0));
+      const adding = S.addSlot && S.addSlot.date === ds && S.addSlot.slot === sl;
+      html += '<div class="slot"><span class="sl">' + sl + '</span><div class="sent">' + es.map(planEntryHtml).join('') +
+        (adding ? '<form class="padd" data-date="' + ds + '" data-slot="' + sl + '"><input type="text" name="t" maxlength="80" placeholder="What are you making?" aria-label="' + sl + ' on ' + dayLabel(d) + '" autocomplete="off"><button type="submit">Add</button><button type="button" data-act="cancelslot">Cancel</button></form>'
+          : '<button type="button" class="addslot" data-act="addslot" data-date="' + ds + '" data-slot="' + sl + '">+ Add ' + sl.toLowerCase() + '</button>') + '</div></div>';
+    }
+    html += '</div>';
+  }
+  $('#weekDays').innerHTML = html;
+  const inp = document.querySelector('form.padd input');
+  if (inp) { if (kept) inp.value = kept; if (!keep) inp.focus(); else inp.focus(); }
+}
+function dinnersAi() {
+  const t = iso(today0()), w0 = weekStart(S.weekOff), days = [];
+  for (let k = 0; k < 7; k++) { const d = new Date(w0); d.setDate(d.getDate() + k); const ds = iso(d); if (ds >= t && !S.plan.some(e => e.date === ds && e.slot === 'Dinner')) days.push(d); }
+  const msg = $('#planMsg');
+  if (!days.length) { msg.textContent = 'Every dinner in this week is planned (or the week is over).'; return; }
+  const usable = S.items.filter(i => i.exp && daysLeft(i.exp) >= 0).sort(byExp);
+  if (!usable.length) { msg.textContent = 'Add a few items to the fridge first.'; return; }
+  S.planBusy = true; msg.textContent = ''; renderPlan();
+  const stock = usable.slice(0, 40).map(i => '- ' + i.name + ' x' + qtyOf(i) + ' (' + daysLeft(i.exp) + ' days left)').join('\n');
+  const planned = S.plan.filter(e => e.slot === 'Dinner').map(e => e.title).slice(-14).join(', ') || 'nothing yet';
+  const names = days.map(d => d.toLocaleDateString(undefined, { weekday: 'long' }));
+  const diet = S.diets.length ? ' Dietary needs: ' + S.diets.join(', ') + '.' : '';
+  const style = S.cuisine !== 'Any' ? ' Lean ' + S.cuisine + '.' : '';
+  aiJson('A household wants dinner ideas for these days: ' + names.join(', ') + '.\nWhat they have (soonest to expire first):\n' + stock + '\nAlready planned dinners: ' + planned + '.\nFor each day in order, suggest one realistic dinner that uses the items expiring soonest first, with no repeats and no dish already planned. Household: ' + S.house.adults + ' adults, ' + S.house.kids + ' kids.' + diet + style + ' Reply with only a JSON array with exactly ' + days.length + ' objects, in the same order as the days: {"title": short dish name under 6 words}.', null, 500)
+    .then(async r => {
+      const list = (Array.isArray(r) ? r : []).filter(x => x && x.title);
+      let n = 0;
+      for (let k = 0; k < Math.min(list.length, days.length); k++) { if (!(await act(() => api.addPlan({ date: iso(days[k]), slot: 'Dinner', title: String(list[k].title).slice(0, 80), sug: true })))) break; n++; }
+      msg.textContent = n ? 'Added ' + n + (n === 1 ? ' dinner' : ' dinners') + '. Remove any you do not want.' : 'No ideas came back. Try again.';
+    })
+    .catch(err => { msg.textContent = aiError(err); })
+    .finally(() => { S.planBusy = false; renderPlan(); });
+}
+$('#planAi').addEventListener('click', dinnersAi);
+document.addEventListener('submit', async e => {
+  const f = e.target.closest && e.target.closest('form.padd'); if (!f) return;
+  e.preventDefault();
+  const title = f.elements.t.value.trim(); if (!title) return;
+  const date = f.dataset.date, slot = f.dataset.slot; S.addSlot = null;
+  await act(() => api.addPlan({ date, slot, title: title.slice(0, 80) }));
+});
+
 /* ---------- smart shopping suggestions ---------- */
 let smartOn = lsGet('chill-smart') === '1', smartBusy = false;
 function renderSmart() {
@@ -585,6 +663,7 @@ document.addEventListener('click', async e => {
   const el = e.target.closest('button'); if (!el) return;
   if (el.dataset.tab) return setTab(el.dataset.tab);
   if (el.dataset.filter) { S.filter = el.dataset.filter; return renderFridge(); }
+  if (el.dataset.mview) { S.mealView = el.dataset.mview; lsSet('chill-mview', S.mealView); return render(); }
   if (el.dataset.cat) { S.cat = el.dataset.cat; return renderFridge(); }
   if (el.dataset.addcat) { S.addCat = el.dataset.addcat; S.catAuto = false; return renderAdd(); }
   if (el.dataset.loc) { S.addLoc = el.dataset.loc; suggestExp(); return renderAdd(); }
@@ -603,6 +682,26 @@ document.addEventListener('click', async e => {
       S.editId = id; S.addLoc = LOCS.includes(it.loc) ? it.loc : 'Fridge'; S.qty = qtyOf(it); S.expAuto = false; S.addCat = catOf(it); S.catAuto = false;
       $('#name').value = it.name; $('#exp').value = it.exp; $('#dateHint').textContent = ''; $('#addMsg').textContent = '';
       renderAdd(); setTab('add'); break;
+    }
+    case 'weekprev': S.weekOff--; S.addSlot = null; renderPlan(); break;
+    case 'weeknext': S.weekOff++; S.addSlot = null; renderPlan(); break;
+    case 'addslot': S.addSlot = { date: el.dataset.date, slot: el.dataset.slot }; renderPlan(); break;
+    case 'cancelslot': S.addSlot = null; renderPlan(); break;
+    case 'rmplan': await act(() => api.removePlan(id)); break;
+    case 'planneeds': {
+      const e2 = S.plan.find(x => x.id === id); if (!e2 || !e2.recipe) break;
+      const have = S.shop.map(s => s.text.toLowerCase());
+      for (const x of buyList(e2.recipe)) if (!have.includes(x.toLowerCase())) await act(() => api.addShop(x.slice(0, 80)));
+      toast('Added to your list'); break;
+    }
+    case 'planpick': S.planPick = S.planPick === Number(el.dataset.n) ? null : Number(el.dataset.n); renderMeals(); break;
+    case 'planit': {
+      const r = (S.meals || [])[Number(el.dataset.n)]; if (!r) break;
+      const rc = { minutes: r.minutes, cuisine: r.cuisine, ingredients: (Array.isArray(r.ingredients) ? r.ingredients : []).filter(x => x && x.name).slice(0, 25).map(x => ({ name: String(x.name), amount: String(x.amount || ''), buy: !!x.buy })), steps: (r.steps || []).slice(0, 10).map(String) };
+      S.planPick = null; renderMeals();
+      const dt = new Date(el.dataset.date + 'T00:00:00');
+      if (await act(() => api.addPlan({ date: el.dataset.date, slot: 'Dinner', title: String(r.title).slice(0, 80), recipe: rc }))) toast('Planned for ' + dt.toLocaleDateString(undefined, { weekday: 'long' }), 'View plan', () => { S.mealView = 'plan'; const ws = new Date(dt); ws.setDate(ws.getDate() - ((ws.getDay() + 6) % 7)); S.weekOff = Math.round((ws - weekStart(0)) / (7 * 864e5)); render(); });
+      break;
     }
     case 'canceledit': endEdit(); setTab('fridge'); break;
     case 'receiptadd': {

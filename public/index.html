@@ -85,7 +85,20 @@
     </form>
   </section>
 
-  <section class="screen" id="s-meals" aria-label="Meal ideas">
+  <section class="screen" id="s-meals" aria-label="Meals">
+    <div class="seg viewseg" id="mealTabs" role="tablist" aria-label="Meals view">
+      <button type="button" class="chip" role="tab" data-mview="plan">Plan</button>
+      <button type="button" class="chip" role="tab" data-mview="ideas">Suggestions</button>
+    </div>
+    <div id="mealPlan" style="display:flex;flex-direction:column;gap:14px">
+      <div class="card weekbar">
+        <div class="wk"><button type="button" class="mini" data-act="weekprev" aria-label="Previous week">&lsaquo;</button><div><h2 id="weekLabel">This week</h2><span class="hint" id="weekSub"></span></div><button type="button" class="mini" data-act="weeknext" aria-label="Next week">&rsaquo;</button></div>
+        <button type="button" class="btn ghost" id="planAi">Suggest dinners for my empty days</button>
+        <p class="hint" id="planMsg" role="status"></p>
+      </div>
+      <div id="weekDays" style="display:flex;flex-direction:column;gap:12px"></div>
+    </div>
+    <div id="mealIdeas" style="display:flex;flex-direction:column;gap:16px">
     <div class="card">
       <h2>Meal ideas</h2>
       <p class="hint" style="min-height:0">Claude looks at what you have and builds dinners around whatever expires first, with exact amounts.</p>
@@ -116,6 +129,7 @@
       <p class="hint" id="mealMsg" role="status"></p>
     </div>
     <div id="meals" style="display:flex;flex-direction:column;gap:16px"></div>
+    </div>
   </section>
 
   <section class="screen" id="s-shop" aria-label="Shopping list">

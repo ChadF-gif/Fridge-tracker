@@ -16,7 +16,7 @@ export default async (req) => {
 
   const store = getStore({ name: 'chill', consistency: 'strong' });
   const state = (await store.get(KEY, { type: 'json' })) || { items: [], shop: [], house: { adults: 2, kids: 0 } };
-  state.items = state.items || []; state.shop = state.shop || []; state.house = state.house || { adults: 2, kids: 0 };
+  state.items = state.items || []; state.plan = state.plan || []; state.shop = state.shop || []; state.house = state.house || { adults: 2, kids: 0 };
 
   if (req.method === 'GET') return json(state);
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -52,6 +52,20 @@ export default async (req) => {
     }
     case 'updateShop': state.shop = state.shop.map(x => x.id === b.id ? { ...x, done: !!(b.fields && b.fields.done) } : x); break;
     case 'removeShop': state.shop = state.shop.filter(x => x.id !== b.id); break;
+    case 'addPlan': {
+      const e = b.entry; if (!e || typeof e.id !== 'string' || e.id.length > 64 || !/^\d{4}-\d{2}-\d{2}$/.test(e.date || '') || !['Breakfast', 'Lunch', 'Dinner'].includes(e.slot) || !clean(e.title).trim()) return json({ error: 'Bad entry' }, 400);
+      if (state.plan.length >= 400) return json({ error: 'Plan is full' }, 400);
+      const rc = e.recipe && Array.isArray(e.recipe.ingredients) ? {
+        minutes: clean(e.recipe.minutes, 10), cuisine: clean(e.recipe.cuisine, 30),
+        ingredients: e.recipe.ingredients.slice(0, 25).map(x => ({ name: clean(x && x.name, 60), amount: clean(x && x.amount, 30), buy: !!(x && x.buy) })),
+        steps: (Array.isArray(e.recipe.steps) ? e.recipe.steps : []).slice(0, 10).map(t => clean(t, 300))
+      } : null;
+      const cutoff = new Date(Date.now() - 45 * 864e5).toISOString().slice(0, 10);
+      state.plan = state.plan.filter(x => x.date >= cutoff);
+      if (!state.plan.some(x => x.id === e.id)) state.plan.push({ id: e.id, date: e.date, slot: e.slot, title: clean(e.title), ...(e.sug ? { sug: true } : {}), ...(rc ? { recipe: rc } : {}), ts: num(e.ts, 0, 9e15, Date.now()) });
+      break;
+    }
+    case 'removePlan': state.plan = state.plan.filter(x => x.id !== b.id); break;
     case 'setHouse': state.house = { adults: num(b.adults, 1, 12, 2), kids: num(b.kids, 0, 12, 0) }; break;
     default: return json({ error: 'Unknown op' }, 400);
   }

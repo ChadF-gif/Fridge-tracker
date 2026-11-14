@@ -1,6 +1,6 @@
 // Local test server: serves /public and mocks /api with in-memory state.
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
-const state = { items: [], shop: [], house: { adults: 2, kids: 0 } };
+const state = { items: [], shop: [], plan: [], house: { adults: 2, kids: 0 } };
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/json' };
 const recipe = n => JSON.stringify({ title: 'Test dinner ' + n, cuisine: 'Italian', minutes: 25, ingredients: [{ name: 'Chicken breasts', amount: '1.5 lb' }, { name: 'Basil', amount: '1/4 cup', buy: true }], steps: ['Season 1 tsp salt.', 'Bake 400F for 20 min.'] });
 http.createServer(async (req, res) => {
@@ -9,7 +9,7 @@ http.createServer(async (req, res) => {
     if (req.headers['x-household-code'] !== 'pizza') { res.writeHead(401, { 'content-type': 'application/json' }); return res.end('{"error":"Wrong code","code":"unauthorized"}'); }
     let body = ''; for await (const c of req) body += c;
     res.writeHead(200, { 'content-type': 'application/json' });
-    if (u.pathname === '/api/ai') return res.end(JSON.stringify({ text: body.includes('grocery items') ? JSON.stringify([{ item: 'Pasta', why: 'goes with chicken' }, { item: 'Cheddar cheese', why: 'dup' }, { item: 'Tortillas', why: 'for beans' }]) : recipe(Math.floor(Math.random() * 99)) }));
+    if (u.pathname === '/api/ai') return res.end(JSON.stringify({ text: body.includes('dinner ideas for these days') ? JSON.stringify(Array.from({length:7},(_,i)=>({title:'Planned dish '+i}))) : body.includes('grocery items') ? JSON.stringify([{ item: 'Pasta', why: 'goes with chicken' }, { item: 'Cheddar cheese', why: 'dup' }, { item: 'Tortillas', why: 'for beans' }]) : recipe(Math.floor(Math.random() * 99)) }));
     if (req.method === 'POST') {
       const b = JSON.parse(body);
       if (b.op === 'addItem') state.items.push(b.item);
@@ -18,6 +18,8 @@ http.createServer(async (req, res) => {
       if (b.op === 'addShop') state.shop.push(b.shop);
       if (b.op === 'updateShop') state.shop = state.shop.map(x => x.id === b.id ? { ...x, ...b.fields } : x);
       if (b.op === 'removeShop') state.shop = state.shop.filter(x => x.id !== b.id);
+      if (b.op === 'addPlan') state.plan.push(b.entry);
+      if (b.op === 'removePlan') state.plan = state.plan.filter(x => x.id !== b.id);
       if (b.op === 'setHouse') state.house = { adults: b.adults, kids: b.kids };
       return res.end('{"ok":true}');
     }
