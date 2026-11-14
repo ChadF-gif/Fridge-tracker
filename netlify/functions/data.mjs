@@ -1,24 +1,20 @@
 import { getStore } from '@netlify/blobs';
+import { codes, match, storeKey } from '../lib/auth.mjs';
 
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
 const clean = (s, n = 80) => String(s == null ? '' : s).slice(0, n);
 const num = (v, lo, hi, d) => { const x = Math.round(Number(v)); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : d; };
 
-function same(a, b) {
-  const x = Buffer.from(String(a)), y = Buffer.from(String(b));
-  if (x.length !== y.length) return false;
-  let r = 0; for (let i = 0; i < x.length; i++) r |= x[i] ^ y[i];
-  return r === 0;
-}
 const okItem = i => i && typeof i.id === 'string' && i.id.length <= 64 && /^\d{4}-\d{2}-\d{2}$/.test(i.exp || '');
 
 export default async (req) => {
-  const secret = process.env.HOUSEHOLD_CODE;
-  if (!secret) return json({ error: 'Server has no household code', code: 'not_configured' }, 503);
-  if (!same(req.headers.get('x-household-code') || '', secret)) return json({ error: 'Wrong code', code: 'unauthorized' }, 401);
+  if (!codes().length) return json({ error: 'Server has no household code', code: 'not_configured' }, 503);
+  const who = match(req.headers.get('x-household-code') || '');
+  if (!who) return json({ error: 'Wrong code', code: 'unauthorized' }, 401);
+  const KEY = storeKey(who);
 
   const store = getStore({ name: 'chill', consistency: 'strong' });
-  const state = (await store.get('state', { type: 'json' })) || { items: [], shop: [], house: { adults: 2, kids: 0 } };
+  const state = (await store.get(KEY, { type: 'json' })) || { items: [], shop: [], house: { adults: 2, kids: 0 } };
   state.items = state.items || []; state.shop = state.shop || []; state.house = state.house || { adults: 2, kids: 0 };
 
   if (req.method === 'GET') return json(state);
@@ -57,7 +53,7 @@ export default async (req) => {
     case 'setHouse': state.house = { adults: num(b.adults, 1, 12, 2), kids: num(b.kids, 0, 12, 0) }; break;
     default: return json({ error: 'Unknown op' }, 400);
   }
-  await store.setJSON('state', state);
+  await store.setJSON(KEY, state);
   return json({ ok: true });
 };
 

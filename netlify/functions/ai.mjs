@@ -1,16 +1,10 @@
+import { codes, match } from '../lib/auth.mjs';
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
 
-function same(a, b) {
-  const x = Buffer.from(String(a)), y = Buffer.from(String(b));
-  if (x.length !== y.length) return false;
-  let r = 0; for (let i = 0; i < x.length; i++) r |= x[i] ^ y[i];
-  return r === 0;
-}
-
 export default async (req) => {
-  const secret = process.env.HOUSEHOLD_CODE, key = process.env.ANTHROPIC_API_KEY;
-  if (!secret) return json({ error: 'Server has no household code', code: 'not_configured' }, 503);
-  if (!same(req.headers.get('x-household-code') || '', secret)) return json({ error: 'Wrong code', code: 'unauthorized' }, 401);
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!codes().length) return json({ error: 'Server has no household code', code: 'not_configured' }, 503);
+  if (!match(req.headers.get('x-household-code') || '')) return json({ error: 'Wrong code', code: 'unauthorized' }, 401);
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
   if (!key) return json({ error: 'No API key', code: 'no_key' }, 503);
 
