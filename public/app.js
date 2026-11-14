@@ -310,8 +310,8 @@ function stockFromShop(text) {
 $('#addForm').addEventListener('submit', async e => {
   e.preventDefault();
   const name = $('#name').value.trim(), exp = $('#exp').value, msg = $('#addMsg');
-  if (!name) { msg.textContent = 'Type what it is.'; $('#name').focus(); return; }
-  if (!exp) { msg.textContent = 'Pick an expiration date, or tap a quick date.'; return; }
+  if (!name) { msg.textContent = 'Type what it is.'; $('#name').scrollIntoView({ block: 'center' }); $('#name').focus(); return; }
+  if (!exp) { msg.textContent = 'Pick an expiration date, or tap a quick date.'; $('#exp').scrollIntoView({ block: 'center', behavior: 'smooth' }); $('#exp').focus(); return; }
   const q = S.qty;
   if (S.editId) {
     const eid = S.editId;
@@ -382,7 +382,13 @@ function stopScan() {
 }
 function onCode(c) { if (!scanRun) return; stopScan(); if (navigator.vibrate) { try { navigator.vibrate(60); } catch (e) {} } lookup(String(c)); }
 function fillName(n) {
-  endEdit(); $('#name').value = n.slice(0, 80); suggestExp(); renderAdd(); setTab('add');
+  endEdit(); $('#name').value = n.slice(0, 80); suggestExp();
+  if (!$('#exp').value) {
+    // Unknown food: guess a date so Add works right away. The person can change it.
+    $('#exp').value = plus(S.addLoc === 'Pantry' ? 180 : 7); S.expAuto = false;
+    $('#dateHint').textContent = 'Guessed a date. Check the package and change it if needed.';
+  }
+  renderAdd(); setTab('add');
 }
 async function lookup(c) {
   const msg = $('#addMsg');
