@@ -1,5 +1,6 @@
 import { getStore } from '@netlify/blobs';
 import { codes, match, storeKey } from '../lib/auth.mjs';
+import { restock } from '../lib/restock.mjs';
 
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
 const clean = (s, n = 80) => String(s == null ? '' : s).slice(0, n);
@@ -24,9 +25,12 @@ export default async (req) => {
 
   const store = getStore({ name: 'chill', consistency: 'strong' });
   const state = (await store.get(KEY, { type: 'json' })) || { items: [], shop: [], house: { adults: 2, kids: 0 } };
-  state.items = state.items || []; state.plan = state.plan || []; state.favs = state.favs || []; state.shop = state.shop || []; state.house = state.house || { adults: 2, kids: 0 };
+  state.items = state.items || []; state.plan = state.plan || []; state.favs = state.favs || []; state.settings = state.settings || { autoRestock: false }; state.shop = state.shop || []; state.house = state.house || { adults: 2, kids: 0 };
 
-  if (req.method === 'GET') return json(state);
+  if (req.method === 'GET') {
+    if (state.settings.autoRestock && restock(state)) await store.setJSON(KEY, state);
+    return json(state);
+  }
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
   let b; try { b = await req.json(); } catch { return json({ error: 'Bad request' }, 400); }
@@ -78,6 +82,7 @@ export default async (req) => {
       break;
     }
     case 'removeFav': state.favs = state.favs.filter(x => x.id !== b.id); break;
+    case 'setSettings': state.settings = { ...state.settings, autoRestock: !!b.autoRestock }; if (state.settings.autoRestock) restock(state); break;
     case 'removePlan': state.plan = state.plan.filter(x => x.id !== b.id); break;
     case 'setHouse': state.house = { adults: num(b.adults, 1, 12, 2), kids: num(b.kids, 0, 12, 0) }; break;
     default: return json({ error: 'Unknown op' }, 400);

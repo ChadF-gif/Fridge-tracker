@@ -15,7 +15,7 @@ const CUISINES = ['Any', 'Italian', 'Mexican', 'Asian', 'American', 'Mediterrane
 const DIETS = ['Vegetarian', 'Vegan', 'Gluten-free', 'Dairy-free', 'Low-carb', 'Kid-friendly'];
 
 const S = { items: [], shop: [], filter: 'All', cat: 'All', q: '', addCat: 'Other', catAuto: true, addLoc: 'Fridge', qty: 1, ready: false, online: true, canWrite: true, canPhoto: true,
-  plan: [], favs: [], genning: new Set(), collapsed: new Set(), favPick: null, favSlot: 'Dinner', mealView: 'plan', weekOff: 0, addSlot: null, planPick: null, planBusy: false, meals: null, house: { adults: 2, kids: 0 }, mealHouse: null, mealPrefs: '', mealNote: '', busy: false, err: '', enter: false, mealEnter: false,
+  plan: [], favs: [], autoRestock: false, genning: new Set(), collapsed: new Set(), favPick: null, favSlot: 'Dinner', mealView: 'plan', weekOff: 0, addSlot: null, planPick: null, planBusy: false, meals: null, house: { adults: 2, kids: 0 }, mealHouse: null, mealPrefs: '', mealNote: '', busy: false, err: '', enter: false, mealEnter: false,
   cuisine: 'Any', diets: [], receipt: [], editId: null, expAuto: true, scanCode: null, reading: false, receiptBusy: false };
 
 function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -100,6 +100,7 @@ const api = {
   setPlanRecipe: async (id, recipe) => { S.plan = S.plan.map(x => x.id === id ? Object.assign({}, x, { recipe }) : x); render(); await send('setPlanRecipe', { id, recipe }); },
   addFav: async o => { const f = Object.assign({ id: uid(), ts: Date.now() }, o); S.favs = S.favs.concat(f); render(); await send('addFav', { fav: f }); },
   removeFav: async id => { S.favs = S.favs.filter(x => x.id !== id); render(); await send('removeFav', { id }); },
+  setSettings: async o => { Object.assign(S, o); render(); await send('setSettings', o); },
   setHouse: async h => { await send('setHouse', { adults: h.adults, kids: h.kids }); }
 };
 
@@ -112,6 +113,7 @@ function applyServer(d) {
   S.shop = Array.isArray(d.shop) ? d.shop : [];
   S.plan = Array.isArray(d.plan) ? d.plan : [];
   S.favs = Array.isArray(d.favs) ? d.favs : [];
+  S.autoRestock = !!(d.settings && d.settings.autoRestock);
   if (d.house && !pc.house) S.house = { adults: Math.max(1, Math.min(12, Math.round(Number(d.house.adults) || 2))), kids: Math.max(0, Math.min(12, Math.round(Number(d.house.kids) || 0))) };
   const first = !S.ready;
   S.ready = true; S.err = '';
@@ -261,7 +263,7 @@ function renderFridge() {
 function renderShop() {
   const rows = S.shop.slice().sort((a, b) => (a.done - b.done) || ((a.ts || 0) - (b.ts || 0)));
   $('#shopList').innerHTML = rows.length ? rows.map(s =>
-    '<div class="shop' + (s.done ? ' done' : '') + '"><input type="checkbox" data-shopid="' + esc(s.id) + '"' + (s.done ? ' checked' : '') + ' aria-label="Got ' + esc(s.text) + '"><span>' + esc(s.text) + (s.sug ? '<em class="tag sug">Suggested</em>' : '') + '</span>' +
+    '<div class="shop' + (s.done ? ' done' : '') + '"><input type="checkbox" data-shopid="' + esc(s.id) + '"' + (s.done ? ' checked' : '') + ' aria-label="Got ' + esc(s.text) + '"><span>' + esc(s.text) + (s.sug ? '<em class="tag sug">Suggested</em>' : '') + (s.auto ? '<em class="tag auto">Auto</em>' : '') + '</span>' +
     '<button class="x" data-act="rmshop" data-id="' + esc(s.id) + '" aria-label="Remove ' + esc(s.text) + '">&times;</button></div>').join('')
     : '<div class="empty">Nothing on the list. Items you restock from the fridge land here.</div>';
 }
@@ -682,6 +684,7 @@ document.addEventListener('submit', async e => {
 /* ---------- smart shopping suggestions ---------- */
 let smartOn = lsGet('chill-smart') === '1', smartBusy = false;
 function renderSmart() {
+  $('#autoToggle').checked = !!S.autoRestock;
   $('#smartToggle').checked = smartOn;
   $('#smartBtn').hidden = !smartOn; $('#smartBtn').disabled = smartBusy;
   $('#smartBtn').textContent = smartBusy ? 'Thinking\u2026' : 'Suggest again';
@@ -714,6 +717,16 @@ $('#smartToggle').addEventListener('change', e => {
   if (smartOn) smartSuggest(true); else $('#smartMsg').textContent = '';
 });
 $('#smartBtn').addEventListener('click', () => smartSuggest(true));
+$('#autoToggle').addEventListener('change', async e => {
+  const on = e.target.checked;
+  if (await act(() => api.setSettings({ autoRestock: on }), on ? 'Auto-add is on' : 'Auto-add is off')) { if (on) refresh(); } else renderSmart();
+});
+$('#copyList').addEventListener('click', async () => {
+  const lines = S.shop.filter(x => !x.done).map(x => x.text);
+  if (!lines.length) { toast('Your list is empty.'); return; }
+  try { await navigator.clipboard.writeText(lines.join('\n')); toast('Copied ' + lines.length + (lines.length === 1 ? ' item' : ' items') + '. Paste into the store app.'); }
+  catch (e) { toast('Could not copy. Try again.'); }
+});
 
 /* ---------- clicks ---------- */
 document.addEventListener('click', async e => {

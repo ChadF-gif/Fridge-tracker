@@ -258,3 +258,6 @@ form.padd button[type=button]{background:var(--surface2);color:var(--ink)}
 .pr[open] summary{padding-bottom:8px}
 .pr h5{margin:6px 0 0;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--mute);font-weight:600}
 .favact{display:flex;gap:8px;flex-wrap:wrap}.favact .btn{flex:1 1 140px;padding:12px;font-size:14px}
+
+.tag.auto{background:var(--soon-bg);color:var(--soon)}
+.card.smart.autocard{gap:12px}

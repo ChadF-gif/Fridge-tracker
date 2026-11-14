@@ -142,6 +142,10 @@
       <h2>Shopping list</h2>
       <input type="text" id="shopIn" placeholder="Add something and press Enter" maxlength="80" aria-label="Add to shopping list">
     </form>
+    <div class="card smart" id="autoCard">
+      <label class="smartrow"><span><b>Auto-add expiring items</b><small>Anything within 7 days of expiring goes on this list once, tagged Auto, so it's ready for your next pickup order. Remove any you don't need.</small></span><input type="checkbox" id="autoToggle" role="switch" aria-label="Auto-add expiring items"></label>
+      <button type="button" class="btn ghost" id="copyList">Copy list for Walmart, Publix or Kroger</button>
+    </div>
     <div class="card smart" id="smartCard">
       <label class="smartrow"><span><b>Smart suggestions</b><small>Adds a few items that would complete meals with what you have. Remove any you don't want.</small></span><input type="checkbox" id="smartToggle" role="switch" aria-label="Smart suggestions"></label>
       <button type="button" class="btn ghost" id="smartBtn" hidden>Suggest again</button>
