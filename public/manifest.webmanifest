@@ -1,6 +1,6 @@
 {
-  "name": "Chill",
-  "short_name": "Chill",
+  "name": "Chill Fridge",
+  "short_name": "Chill Fridge",
   "description": "Know what's in your fridge.",
   "start_url": "/",
   "scope": "/",
