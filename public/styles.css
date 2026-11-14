@@ -251,3 +251,10 @@ form.padd input{flex:1 1 140px;min-width:0;box-sizing:border-box;min-height:44px
 form.padd button{border:0;border-radius:12px;padding:0 14px;min-height:44px;font-weight:700;background:var(--grad);color:var(--accent-ink)}
 form.padd button[type=button]{background:var(--surface2);color:var(--ink)}
 .planpick{display:flex;flex-direction:column;gap:8px}
+
+.pe .fv{color:var(--accent);font-size:20px}
+.pr.gen{background:var(--surface2);border-radius:12px;margin-top:-6px;padding:10px 12px;color:var(--mute);font-size:14px}
+.pe+.btn.ghost{margin-top:-2px;padding:11px;font-size:14px}
+.pr[open] summary{padding-bottom:8px}
+.pr h5{margin:6px 0 0;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--mute);font-weight:600}
+.favact{display:flex;gap:8px;flex-wrap:wrap}.favact .btn{flex:1 1 140px;padding:12px;font-size:14px}

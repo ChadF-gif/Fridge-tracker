@@ -15,7 +15,7 @@ const CUISINES = ['Any', 'Italian', 'Mexican', 'Asian', 'American', 'Mediterrane
 const DIETS = ['Vegetarian', 'Vegan', 'Gluten-free', 'Dairy-free', 'Low-carb', 'Kid-friendly'];
 
 const S = { items: [], shop: [], filter: 'All', cat: 'All', q: '', addCat: 'Other', catAuto: true, addLoc: 'Fridge', qty: 1, ready: false, online: true, canWrite: true, canPhoto: true,
-  plan: [], mealView: 'plan', weekOff: 0, addSlot: null, planPick: null, planBusy: false, meals: null, house: { adults: 2, kids: 0 }, mealHouse: null, mealPrefs: '', mealNote: '', busy: false, err: '', enter: false, mealEnter: false,
+  plan: [], favs: [], genning: new Set(), collapsed: new Set(), favPick: null, favSlot: 'Dinner', mealView: 'plan', weekOff: 0, addSlot: null, planPick: null, planBusy: false, meals: null, house: { adults: 2, kids: 0 }, mealHouse: null, mealPrefs: '', mealNote: '', busy: false, err: '', enter: false, mealEnter: false,
   cuisine: 'Any', diets: [], receipt: [], editId: null, expAuto: true, scanCode: null, reading: false, receiptBusy: false };
 
 function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -97,6 +97,9 @@ const api = {
   removeShop: async id => { S.shop = S.shop.filter(s => s.id !== id); render(); await send('removeShop', { id }); },
   addPlan: async o => { const e = Object.assign({ id: uid(), ts: Date.now() }, o); S.plan = S.plan.concat(e); render(); await send('addPlan', { entry: e }); },
   removePlan: async id => { S.plan = S.plan.filter(x => x.id !== id); render(); await send('removePlan', { id }); },
+  setPlanRecipe: async (id, recipe) => { S.plan = S.plan.map(x => x.id === id ? Object.assign({}, x, { recipe }) : x); render(); await send('setPlanRecipe', { id, recipe }); },
+  addFav: async o => { const f = Object.assign({ id: uid(), ts: Date.now() }, o); S.favs = S.favs.concat(f); render(); await send('addFav', { fav: f }); },
+  removeFav: async id => { S.favs = S.favs.filter(x => x.id !== id); render(); await send('removeFav', { id }); },
   setHouse: async h => { await send('setHouse', { adults: h.adults, kids: h.kids }); }
 };
 
@@ -108,6 +111,7 @@ function applyServer(d) {
   S.items = Array.isArray(d.items) ? d.items : [];
   S.shop = Array.isArray(d.shop) ? d.shop : [];
   S.plan = Array.isArray(d.plan) ? d.plan : [];
+  S.favs = Array.isArray(d.favs) ? d.favs : [];
   if (d.house && !pc.house) S.house = { adults: Math.max(1, Math.min(12, Math.round(Number(d.house.adults) || 2))), kids: Math.max(0, Math.min(12, Math.round(Number(d.house.kids) || 0))) };
   const first = !S.ready;
   S.ready = true; S.err = '';
@@ -283,6 +287,7 @@ function renderMeals() {
       '<h4>Steps</h4><ol>' + (r.steps || []).map(st => '<li>' + esc(st) + '</li>').join('') + '</ol>' +
       (buyList(r).length ? '<button class="btn ghost" data-act="needs" data-n="' + n + '">Add what I\'m missing to the list</button>' : '') +
       '<button class="btn ghost" data-act="planpick" data-n="' + n + '">Add to meal plan</button>' +
+      '<button class="btn ghost" data-act="favidea" data-n="' + n + '">' + (isFav(r.title) ? '\u2665 Saved to favorites' : '\u2661 Save to favorites') + '</button>' +
       (S.planPick === n ? '<div class="planpick"><span class="hint" style="min-height:0">Which night?</span><div class="chips wrap">' + [0,1,2,3,4,5,6].map(k => { const d = today0(); d.setDate(d.getDate() + k); return '<button type="button" class="chip" data-act="planit" data-n="' + n + '" data-date="' + iso(d) + '">' + (k === 0 ? 'Today' : d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })) + '</button>'; }).join('') + '</div></div>' : '') + '</div>';
   }).join('');
   box.classList.toggle('enter', S.mealEnter);
@@ -307,7 +312,7 @@ function renderSync() {
   el.lastElementChild.textContent = !S.ready ? 'Loading' : S.online ? 'Shared and live' : 'Offline';
 }
 
-function render() { renderSmart(); renderSync(); renderFridge(); renderAdd(); renderMeals(); renderPlan(); renderShop(); }
+function render() { renderSmart(); renderSync(); renderFridge(); renderAdd(); renderMeals(); renderPlan(); renderFavs(); renderShop(); }
 
 function setTab(t) {
   if (!['fridge', 'add', 'meals', 'shop'].includes(t)) t = 'fridge';
@@ -553,17 +558,68 @@ $('#mealBtn').addEventListener('click', async () => {
 const SLOTS = ['Breakfast', 'Lunch', 'Dinner'];
 function weekStart(off) { const d = today0(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + off * 7); return d; }
 function dayLabel(d) { return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); }
+const isFav = t => S.favs.some(f => String(f.title).toLowerCase() === String(t).toLowerCase());
+function recipeFrom(r, hh) {
+  return { minutes: r.minutes, cuisine: r.cuisine, adults: hh.adults, kids: hh.kids,
+    ingredients: (Array.isArray(r.ingredients) ? r.ingredients : []).filter(x => x && x.name).slice(0, 25).map(x => ({ name: String(x.name), amount: String(x.amount || ''), buy: !!x.buy })),
+    steps: (Array.isArray(r.steps) ? r.steps : []).slice(0, 10).map(String) };
+}
+function forWho(rc) { return rc && rc.adults ? 'for ' + rc.adults + (rc.adults === 1 ? ' adult' : ' adults') + (rc.kids ? ' + ' + rc.kids + (rc.kids === 1 ? ' kid' : ' kids') : '') : ''; }
+function recipeBody(rc) {
+  return '<div class="rb"><h5>Ingredients</h5><ul>' + rc.ingredients.map(x => '<li><b>' + esc(x.amount) + '</b> ' + esc(x.name) + (x.buy ? ' <em class="tag low">Buy</em>' : '') + '</li>').join('') + '</ul><h5>Steps</h5><ol>' + (rc.steps || []).map(t => '<li>' + esc(t) + '</li>').join('') + '</ol></div>';
+}
+function recipeSummary(rc) { return 'Recipe' + (rc.minutes ? ' \u00b7 ' + esc(rc.minutes) + ' min' : '') + (forWho(rc) ? ' \u00b7 ' + forWho(rc) : ''); }
 function planEntryHtml(e) {
-  const rc = e.recipe, ing = rc && Array.isArray(rc.ingredients) ? rc.ingredients : [];
-  const head = '<div class="pe"><span class="pt">' + esc(e.title) + '</span>' + (e.sug ? '<em class="tag sug">Suggested</em>' : '') + '<button class="x" data-act="rmplan" data-id="' + esc(e.id) + '" aria-label="Remove ' + esc(e.title) + '">&times;</button></div>';
-  if (!rc || !ing.length) return head;
-  return head + '<details class="pr"><summary>Recipe' + (rc.minutes ? ' \u00b7 ' + esc(rc.minutes) + ' min' : '') + '</summary><div class="rb"><ul>' +
-    ing.map(x => '<li><b>' + esc(x.amount) + '</b> ' + esc(x.name) + '</li>').join('') + '</ul><ol>' + (rc.steps || []).map(t => '<li>' + esc(t) + '</li>').join('') + '</ol></div>' +
+  const rc = e.recipe, has = rc && Array.isArray(rc.ingredients) && rc.ingredients.length, fav = isFav(e.title);
+  const head = '<div class="pe"><span class="pt">' + esc(e.title) + '</span>' + (e.sug ? '<em class="tag sug">Suggested</em>' : '') +
+    '<button class="x fv" data-act="favplan" data-id="' + esc(e.id) + '" aria-pressed="' + fav + '" aria-label="' + (fav ? 'Remove from favorites' : 'Save to favorites') + '">' + (fav ? '\u2665' : '\u2661') + '</button>' +
+    '<button class="x" data-act="rmplan" data-id="' + esc(e.id) + '" aria-label="Remove ' + esc(e.title) + '">&times;</button></div>';
+  if (has) return head + '<details class="pr" data-id="' + esc(e.id) + '"' + (S.collapsed.has(e.id) ? '' : ' open') + '><summary>' + recipeSummary(rc) + '</summary>' + recipeBody(rc) +
     (buyList(rc).length ? '<button type="button" class="btn ghost" data-act="planneeds" data-id="' + esc(e.id) + '">Add what I\'m missing to the list</button>' : '') + '</details>';
+  if (S.genning.has(e.id)) return head + '<div class="pr gen" role="status">Writing the recipe\u2026</div>';
+  return head + '<button type="button" class="btn ghost" data-act="getrecipe" data-id="' + esc(e.id) + '">Get the recipe</button>';
+}
+async function genRecipe(id) {
+  const e = S.plan.find(x => x.id === id); if (!e || e.recipe || S.genning.has(id)) return;
+  S.genning.add(id); renderPlan();
+  try {
+    const hh = { adults: S.house.adults, kids: S.house.kids }, portions = hh.adults + hh.kids * 0.5;
+    const stock = S.items.filter(i => i.exp && daysLeft(i.exp) >= 0).slice(0, 40).map(i => i.name + ' x' + qtyOf(i)).join(', ') || 'nothing listed';
+    const diet = S.diets.length ? ' It must be ' + S.diets.join(', ').toLowerCase() + '.' : '';
+    const r = await aiJson('Write a recipe for "' + e.title + '" (a ' + e.slot.toLowerCase() + '). They are cooking for ' + hh.adults + (hh.adults === 1 ? ' adult' : ' adults') + ' and ' + hh.kids + (hh.kids === 1 ? ' kid' : ' kids') +
+      '. Count each adult as one full portion and each kid as half, so size every amount for ' + portions + ' adult portions.' + diet + ' Use US measurements (cups, tbsp, tsp, oz, lb) and give every ingredient an exact amount, using counts for things like eggs or cans. Assume salt, pepper, cooking oil and common spices are on hand but still list them with amounts. What they have: ' + stock +
+      '. Reply with only one JSON object: {"minutes": number, "cuisine": a one or two word style label, "ingredients": [{"name": string, "amount": string such as "1.5 lb" or "2 tbsp", "buy": true only if it is not in what they have and not a basic pantry staple}], "steps": [3 to 6 short strings with key amounts, temperatures and times]}.', null, 1000);
+    if (!r || !Array.isArray(r.ingredients) || !r.ingredients.length) throw { code: 'invalid_json' };
+    await api.setPlanRecipe(id, recipeFrom(r, hh));
+  } catch (err) { toast(aiError(err)); }
+  finally { S.genning.delete(id); renderPlan(); }
+}
+async function genMany(ids) {
+  const q = ids.slice();
+  const worker = async () => { while (q.length) await genRecipe(q.shift()); };
+  await Promise.all([worker(), worker(), worker()]);
+}
+document.addEventListener('toggle', e => {
+  const d = e.target; if (!d || !d.matches || !d.matches('details.pr')) return;
+  if (d.open) S.collapsed.delete(d.dataset.id); else S.collapsed.add(d.dataset.id);
+}, true);
+
+function renderFavs() {
+  const on = S.mealView === 'favs'; $('#mealFavs').hidden = !on; if (!on) return;
+  const week = [0,1,2,3,4,5,6].map(k => { const d = today0(); d.setDate(d.getDate() + k); return d; });
+  const fs = S.favs.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  $('#favList').innerHTML = fs.length ? fs.map(f => {
+    const rc = f.recipe, has = rc && Array.isArray(rc.ingredients) && rc.ingredients.length;
+    return '<div class="card recipe"><h3>' + esc(f.title) + '</h3><div class="meta">' + (rc && rc.cuisine ? esc(rc.cuisine) + ' \u00b7 ' : '') + (rc && rc.minutes ? esc(rc.minutes) + ' min \u00b7 ' : '') + (has ? forWho(rc) : 'Recipe is written when you plan it') + '</div>' +
+      (has ? '<details class="pr" style="margin-top:0"><summary>Recipe</summary>' + recipeBody(rc) + '</details>' : '') +
+      '<div class="favact"><button type="button" class="btn" data-act="favpick" data-id="' + esc(f.id) + '">Add to plan</button><button type="button" class="btn ghost" data-act="rmfav" data-id="' + esc(f.id) + '">Remove</button></div>' +
+      (S.favPick === f.id ? '<div class="planpick"><span class="hint" style="min-height:0">Which meal?</span><div class="chips wrap">' + SLOTS.map(sl => '<button type="button" class="chip" data-act="favslot" data-slot="' + sl + '" aria-pressed="' + (S.favSlot === sl) + '">' + sl + '</button>').join('') + '</div><span class="hint" style="min-height:0">Which day?</span><div class="chips wrap">' +
+        week.map((d, k) => '<button type="button" class="chip" data-act="favdate" data-id="' + esc(f.id) + '" data-date="' + iso(d) + '">' + (k === 0 ? 'Today' : d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })) + '</button>').join('') + '</div></div>' : '') + '</div>';
+  }).join('') : '<div class="empty"><span>No favorites yet. Tap the heart on a planned meal, or Save to favorites on any suggestion.</span></div>';
 }
 function renderPlan() {
   const on = S.mealView === 'plan';
-  $('#mealPlan').hidden = !on; $('#mealIdeas').hidden = on;
+  $('#mealPlan').hidden = !on; $('#mealIdeas').hidden = S.mealView !== 'ideas'; $('#mealFavs').hidden = S.mealView !== 'favs';
   document.querySelectorAll('#mealTabs .chip').forEach(b => { b.setAttribute('aria-pressed', String(b.dataset.mview === S.mealView)); b.setAttribute('aria-selected', String(b.dataset.mview === S.mealView)); });
   if (!on) return;
   const keep = document.querySelector('form.padd input'), kept = keep ? keep.value : '';
@@ -605,9 +661,10 @@ function dinnersAi() {
   aiJson('A household wants dinner ideas for these days: ' + names.join(', ') + '.\nWhat they have (soonest to expire first):\n' + stock + '\nAlready planned dinners: ' + planned + '.\nFor each day in order, suggest one realistic dinner that uses the items expiring soonest first, with no repeats and no dish already planned. Household: ' + S.house.adults + ' adults, ' + S.house.kids + ' kids.' + diet + style + ' Reply with only a JSON array with exactly ' + days.length + ' objects, in the same order as the days: {"title": short dish name under 6 words}.', null, 500)
     .then(async r => {
       const list = (Array.isArray(r) ? r : []).filter(x => x && x.title);
-      let n = 0;
-      for (let k = 0; k < Math.min(list.length, days.length); k++) { if (!(await act(() => api.addPlan({ date: iso(days[k]), slot: 'Dinner', title: String(list[k].title).slice(0, 80), sug: true })))) break; n++; }
-      msg.textContent = n ? 'Added ' + n + (n === 1 ? ' dinner' : ' dinners') + '. Remove any you do not want.' : 'No ideas came back. Try again.';
+      let n = 0; const ids = [];
+      for (let k = 0; k < Math.min(list.length, days.length); k++) { const pid = uid(); if (!(await act(() => api.addPlan({ id: pid, date: iso(days[k]), slot: 'Dinner', title: String(list[k].title).slice(0, 80), sug: true })))) break; ids.push(pid); n++; }
+      genMany(ids);
+      msg.textContent = n ? 'Added ' + n + (n === 1 ? ' dinner' : ' dinners') + ' and writing the recipes. Remove any you do not want.' : 'No ideas came back. Try again.';
     })
     .catch(err => { msg.textContent = aiError(err); })
     .finally(() => { S.planBusy = false; renderPlan(); });
@@ -618,7 +675,8 @@ document.addEventListener('submit', async e => {
   e.preventDefault();
   const title = f.elements.t.value.trim(); if (!title) return;
   const date = f.dataset.date, slot = f.dataset.slot; S.addSlot = null;
-  await act(() => api.addPlan({ date, slot, title: title.slice(0, 80) }));
+  const pid = uid();
+  if (await act(() => api.addPlan({ id: pid, date, slot, title: title.slice(0, 80) }))) genRecipe(pid);
 });
 
 /* ---------- smart shopping suggestions ---------- */
@@ -687,6 +745,29 @@ document.addEventListener('click', async e => {
     case 'addslot': S.addSlot = { date: el.dataset.date, slot: el.dataset.slot }; renderPlan(); break;
     case 'cancelslot': S.addSlot = null; renderPlan(); break;
     case 'rmplan': await act(() => api.removePlan(id)); break;
+    case 'getrecipe': genRecipe(id); break;
+    case 'favplan': {
+      const e2 = S.plan.find(x => x.id === id); if (!e2) break;
+      const ex = S.favs.find(f => String(f.title).toLowerCase() === String(e2.title).toLowerCase());
+      if (ex) { await act(() => api.removeFav(ex.id), 'Removed from favorites'); break; }
+      await act(() => api.addFav({ title: e2.title, ...(e2.recipe ? { recipe: e2.recipe } : {}) }), 'Saved to favorites'); break;
+    }
+    case 'favidea': {
+      const r = (S.meals || [])[Number(el.dataset.n)]; if (!r) break;
+      const ex = S.favs.find(f => String(f.title).toLowerCase() === String(r.title).toLowerCase());
+      if (ex) { await act(() => api.removeFav(ex.id), 'Removed from favorites'); break; }
+      await act(() => api.addFav({ title: String(r.title).slice(0, 80), recipe: recipeFrom(r, S.mealHouse || S.house) }), 'Saved to favorites'); renderMeals(); break;
+    }
+    case 'rmfav': await act(() => api.removeFav(id)); break;
+    case 'favpick': S.favPick = S.favPick === id ? null : id; renderFavs(); break;
+    case 'favslot': S.favSlot = el.dataset.slot; renderFavs(); break;
+    case 'favdate': {
+      const f = S.favs.find(x => x.id === id); if (!f) break;
+      const pid = uid(), date = el.dataset.date, slot = S.favSlot; S.favPick = null;
+      const ok = await act(() => api.addPlan({ id: pid, date, slot, title: f.title, ...(f.recipe ? { recipe: f.recipe } : {}) }));
+      if (ok) { const dt = new Date(date + 'T00:00:00'); toast(slot + ' planned for ' + dt.toLocaleDateString(undefined, { weekday: 'long' }), 'View plan', () => { S.mealView = 'plan'; const ws = new Date(dt); ws.setDate(ws.getDate() - ((ws.getDay() + 6) % 7)); S.weekOff = Math.round((ws - weekStart(0)) / (7 * 864e5)); render(); }); if (!f.recipe) genRecipe(pid); }
+      renderFavs(); break;
+    }
     case 'planneeds': {
       const e2 = S.plan.find(x => x.id === id); if (!e2 || !e2.recipe) break;
       const have = S.shop.map(s => s.text.toLowerCase());
@@ -696,7 +777,7 @@ document.addEventListener('click', async e => {
     case 'planpick': S.planPick = S.planPick === Number(el.dataset.n) ? null : Number(el.dataset.n); renderMeals(); break;
     case 'planit': {
       const r = (S.meals || [])[Number(el.dataset.n)]; if (!r) break;
-      const rc = { minutes: r.minutes, cuisine: r.cuisine, ingredients: (Array.isArray(r.ingredients) ? r.ingredients : []).filter(x => x && x.name).slice(0, 25).map(x => ({ name: String(x.name), amount: String(x.amount || ''), buy: !!x.buy })), steps: (r.steps || []).slice(0, 10).map(String) };
+      const rc = recipeFrom(r, S.mealHouse || S.house);
       S.planPick = null; renderMeals();
       const dt = new Date(el.dataset.date + 'T00:00:00');
       if (await act(() => api.addPlan({ date: el.dataset.date, slot: 'Dinner', title: String(r.title).slice(0, 80), recipe: rc }))) toast('Planned for ' + dt.toLocaleDateString(undefined, { weekday: 'long' }), 'View plan', () => { S.mealView = 'plan'; const ws = new Date(dt); ws.setDate(ws.getDate() - ((ws.getDay() + 6) % 7)); S.weekOff = Math.round((ws - weekStart(0)) / (7 * 864e5)); render(); });

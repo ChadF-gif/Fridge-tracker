@@ -88,6 +88,7 @@
   <section class="screen" id="s-meals" aria-label="Meals">
     <div class="seg viewseg" id="mealTabs" role="tablist" aria-label="Meals view">
       <button type="button" class="chip" role="tab" data-mview="plan">Plan</button>
+      <button type="button" class="chip" role="tab" data-mview="favs">Favorites</button>
       <button type="button" class="chip" role="tab" data-mview="ideas">Suggestions</button>
     </div>
     <div id="mealPlan" style="display:flex;flex-direction:column;gap:14px">
@@ -97,6 +98,10 @@
         <p class="hint" id="planMsg" role="status"></p>
       </div>
       <div id="weekDays" style="display:flex;flex-direction:column;gap:12px"></div>
+    </div>
+    <div id="mealFavs" style="display:flex;flex-direction:column;gap:14px">
+      <div class="card"><h2>Favorites</h2><p class="hint" style="min-height:0">Meals you love, saved with their recipes. Tap Add to plan to drop one on any day.</p></div>
+      <div id="favList" style="display:flex;flex-direction:column;gap:14px"></div>
     </div>
     <div id="mealIdeas" style="display:flex;flex-direction:column;gap:16px">
     <div class="card">

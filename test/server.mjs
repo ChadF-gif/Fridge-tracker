@@ -1,6 +1,6 @@
 // Local test server: serves /public and mocks /api with in-memory state.
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
-const state = { items: [], shop: [], plan: [], house: { adults: 2, kids: 0 } };
+const state = { items: [], shop: [], plan: [], favs: [], house: { adults: 2, kids: 0 } };
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/json' };
 const recipe = n => JSON.stringify({ title: 'Test dinner ' + n, cuisine: 'Italian', minutes: 25, ingredients: [{ name: 'Chicken breasts', amount: '1.5 lb' }, { name: 'Basil', amount: '1/4 cup', buy: true }], steps: ['Season 1 tsp salt.', 'Bake 400F for 20 min.'] });
 http.createServer(async (req, res) => {
@@ -20,6 +20,9 @@ http.createServer(async (req, res) => {
       if (b.op === 'removeShop') state.shop = state.shop.filter(x => x.id !== b.id);
       if (b.op === 'addPlan') state.plan.push(b.entry);
       if (b.op === 'removePlan') state.plan = state.plan.filter(x => x.id !== b.id);
+      if (b.op === 'setPlanRecipe') state.plan = state.plan.map(x => x.id === b.id ? { ...x, recipe: b.recipe } : x);
+      if (b.op === 'addFav') state.favs.push(b.fav);
+      if (b.op === 'removeFav') state.favs = state.favs.filter(x => x.id !== b.id);
       if (b.op === 'setHouse') state.house = { adults: b.adults, kids: b.kids };
       return res.end('{"ok":true}');
     }

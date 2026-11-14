@@ -1,0 +1,23 @@
+const { chromium, devices } = require('playwright');
+(async () => {
+  const b = await chromium.launch(); const p = await (await b.newContext({ ...devices['iPhone 13'], deviceScaleFactor: 2 })).newPage();
+  const errs = []; p.on('pageerror', e => errs.push(String(e)));
+  await p.goto('http://localhost:8899/'); await p.fill('#gateCode', 'pizza'); await p.press('#gateCode', 'Enter'); await p.waitForTimeout(500);
+  await p.click('#tabs [data-tab=add]'); await p.fill('#name', 'Chicken breasts'); await p.click('#addBtn'); await p.waitForTimeout(300);
+  await p.click('#tabs [data-tab=meals]');
+  await p.click('.day.today [data-slot=Dinner]'); await p.fill('form.padd input', 'Lemon chicken'); await p.press('form.padd input', 'Enter'); await p.waitForTimeout(1200);
+  console.log('manual add -> recipe details:', await p.locator('details.pr[open]').count(), '| ingredient lines:', await p.locator('details.pr li').count());
+  await p.screenshot({ path: 'test/plan2.png' });
+  await p.click('.pe .fv'); await p.waitForTimeout(400);
+  await p.click('[data-mview=favs]'); await p.waitForTimeout(300);
+  console.log('favorites:', await p.locator('#favList .card').count(), '| heart:', await p.textContent('.pe .fv').catch(()=>'(n/a on this view)'));
+  await p.click('[data-act=favpick]'); await p.click('[data-act=favslot][data-slot=Lunch]'); await p.click('[data-act=favdate] >> nth=1'); await p.waitForTimeout(500);
+  await p.click('[data-mview=plan]'); await p.waitForTimeout(300);
+  console.log('plan entries after fav->plan:', await p.locator('.pe').count(), '| recipes:', await p.locator('details.pr').count());
+  await p.click('[data-mview=ideas]'); await p.click('#mealBtn'); await p.waitForTimeout(1800);
+  await p.click('[data-act=favidea] >> nth=0'); await p.waitForTimeout(400);
+  await p.click('[data-mview=favs]'); console.log('favorites after idea save:', await p.locator('#favList .card').count());
+  await p.screenshot({ path: 'test/favs.png' });
+  await p.click('[data-act=rmfav] >> nth=0'); await p.waitForTimeout(300); console.log('after remove:', await p.locator('#favList .card').count());
+  console.log('errors', errs); await b.close();
+})();

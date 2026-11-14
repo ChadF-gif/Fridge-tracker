@@ -6,6 +6,14 @@ const clean = (s, n = 80) => String(s == null ? '' : s).slice(0, n);
 const num = (v, lo, hi, d) => { const x = Math.round(Number(v)); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : d; };
 
 const CATS = ['Vegetables', 'Fruit', 'Protein', 'Dairy & Eggs', 'Condiments', 'Grains & Bread', 'Drinks', 'Snacks & Sweets', 'Leftovers', 'Other'];
+function cleanRecipe(r) {
+  if (!r || !Array.isArray(r.ingredients) || !r.ingredients.length) return null;
+  return {
+    minutes: clean(r.minutes, 10), cuisine: clean(r.cuisine, 30), adults: num(r.adults, 0, 12, 0), kids: num(r.kids, 0, 12, 0),
+    ingredients: r.ingredients.slice(0, 25).map(x => ({ name: clean(x && x.name, 60), amount: clean(x && x.amount, 30), buy: !!(x && x.buy) })),
+    steps: (Array.isArray(r.steps) ? r.steps : []).slice(0, 10).map(t => clean(t, 300))
+  };
+}
 const okItem = i => i && typeof i.id === 'string' && i.id.length <= 64 && /^\d{4}-\d{2}-\d{2}$/.test(i.exp || '');
 
 export default async (req) => {
@@ -16,7 +24,7 @@ export default async (req) => {
 
   const store = getStore({ name: 'chill', consistency: 'strong' });
   const state = (await store.get(KEY, { type: 'json' })) || { items: [], shop: [], house: { adults: 2, kids: 0 } };
-  state.items = state.items || []; state.plan = state.plan || []; state.shop = state.shop || []; state.house = state.house || { adults: 2, kids: 0 };
+  state.items = state.items || []; state.plan = state.plan || []; state.favs = state.favs || []; state.shop = state.shop || []; state.house = state.house || { adults: 2, kids: 0 };
 
   if (req.method === 'GET') return json(state);
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -55,16 +63,21 @@ export default async (req) => {
     case 'addPlan': {
       const e = b.entry; if (!e || typeof e.id !== 'string' || e.id.length > 64 || !/^\d{4}-\d{2}-\d{2}$/.test(e.date || '') || !['Breakfast', 'Lunch', 'Dinner'].includes(e.slot) || !clean(e.title).trim()) return json({ error: 'Bad entry' }, 400);
       if (state.plan.length >= 400) return json({ error: 'Plan is full' }, 400);
-      const rc = e.recipe && Array.isArray(e.recipe.ingredients) ? {
-        minutes: clean(e.recipe.minutes, 10), cuisine: clean(e.recipe.cuisine, 30),
-        ingredients: e.recipe.ingredients.slice(0, 25).map(x => ({ name: clean(x && x.name, 60), amount: clean(x && x.amount, 30), buy: !!(x && x.buy) })),
-        steps: (Array.isArray(e.recipe.steps) ? e.recipe.steps : []).slice(0, 10).map(t => clean(t, 300))
-      } : null;
+      const rc = cleanRecipe(e.recipe);
       const cutoff = new Date(Date.now() - 45 * 864e5).toISOString().slice(0, 10);
       state.plan = state.plan.filter(x => x.date >= cutoff);
       if (!state.plan.some(x => x.id === e.id)) state.plan.push({ id: e.id, date: e.date, slot: e.slot, title: clean(e.title), ...(e.sug ? { sug: true } : {}), ...(rc ? { recipe: rc } : {}), ts: num(e.ts, 0, 9e15, Date.now()) });
       break;
     }
+    case 'setPlanRecipe': { const rc = cleanRecipe(b.recipe); if (!rc) return json({ error: 'Bad recipe' }, 400); state.plan = state.plan.map(x => x.id === b.id ? { ...x, recipe: rc } : x); break; }
+    case 'addFav': {
+      const f = b.fav; if (!f || typeof f.id !== 'string' || f.id.length > 64 || !clean(f.title).trim()) return json({ error: 'Bad favorite' }, 400);
+      if (state.favs.length >= 150) return json({ error: 'Too many favorites' }, 400);
+      const t = clean(f.title).toLowerCase(), rc = cleanRecipe(f.recipe);
+      if (!state.favs.some(x => x.id === f.id || String(x.title).toLowerCase() === t)) state.favs.push({ id: f.id, title: clean(f.title), ...(rc ? { recipe: rc } : {}), ts: num(f.ts, 0, 9e15, Date.now()) });
+      break;
+    }
+    case 'removeFav': state.favs = state.favs.filter(x => x.id !== b.id); break;
     case 'removePlan': state.plan = state.plan.filter(x => x.id !== b.id); break;
     case 'setHouse': state.house = { adults: num(b.adults, 1, 12, 2), kids: num(b.kids, 0, 12, 0) }; break;
     default: return json({ error: 'Unknown op' }, 400);
