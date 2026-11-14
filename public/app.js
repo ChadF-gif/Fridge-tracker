@@ -22,7 +22,6 @@ function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return n
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 try { const p = JSON.parse(lsGet('chill-prefs')); if (p) { if (CUISINES.includes(p.cuisine)) S.cuisine = p.cuisine; if (Array.isArray(p.diets)) S.diets = p.diets.filter(x => DIETS.includes(x)); } } catch (e) {}
 const savePrefs = () => lsSet('chill-prefs', JSON.stringify({ cuisine: S.cuisine, diets: S.diets }));
-try { const v = lsGet('chill-mview'); if (v === 'plan' || v === 'ideas') S.mealView = v; } catch (e) {}
 let barcodes = {};
 try { barcodes = JSON.parse(lsGet('chill-barcodes')) || {}; } catch (e) {}
 const saveBarcodes = () => lsSet('chill-barcodes', JSON.stringify(barcodes));
@@ -663,7 +662,7 @@ document.addEventListener('click', async e => {
   const el = e.target.closest('button'); if (!el) return;
   if (el.dataset.tab) return setTab(el.dataset.tab);
   if (el.dataset.filter) { S.filter = el.dataset.filter; return renderFridge(); }
-  if (el.dataset.mview) { S.mealView = el.dataset.mview; lsSet('chill-mview', S.mealView); return render(); }
+  if (el.dataset.mview) { S.mealView = el.dataset.mview; return render(); }
   if (el.dataset.cat) { S.cat = el.dataset.cat; return renderFridge(); }
   if (el.dataset.addcat) { S.addCat = el.dataset.addcat; S.catAuto = false; return renderAdd(); }
   if (el.dataset.loc) { S.addLoc = el.dataset.loc; suggestExp(); return renderAdd(); }
@@ -756,6 +755,6 @@ $('#q').addEventListener('input', e => { S.q = e.target.value; renderFridge(); }
 
 /* ---------- start ---------- */
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); }); }
-setTab(location.hash.slice(1));
+setTab('meals'); // the app always opens on the meal plan
 render();
 if (!code) showGate(); else refresh().then(startPolling);
