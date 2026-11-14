@@ -212,3 +212,6 @@ img{max-width:100%}
 .card label.smartrow{display:flex;flex-direction:row;align-items:center;text-transform:none;letter-spacing:0;font-size:16px;font-weight:400;color:var(--fg)}
 .card label.smartrow b{font-size:16px;font-weight:700;text-transform:none;letter-spacing:0}
 .card label.smartrow small{text-transform:none;letter-spacing:0;font-weight:400}
+.two>label{min-width:0}
+input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;max-width:100%;box-sizing:border-box;display:block;text-align:left}
+input[type=date]::-webkit-date-and-time-value{text-align:left;min-height:1.2em}
