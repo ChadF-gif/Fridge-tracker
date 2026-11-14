@@ -5,6 +5,7 @@ const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, 
 const clean = (s, n = 80) => String(s == null ? '' : s).slice(0, n);
 const num = (v, lo, hi, d) => { const x = Math.round(Number(v)); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : d; };
 
+const CATS = ['Vegetables', 'Fruit', 'Protein', 'Dairy & Eggs', 'Condiments', 'Grains & Bread', 'Drinks', 'Snacks & Sweets', 'Leftovers', 'Other'];
 const okItem = i => i && typeof i.id === 'string' && i.id.length <= 64 && /^\d{4}-\d{2}-\d{2}$/.test(i.exp || '');
 
 export default async (req) => {
@@ -25,7 +26,7 @@ export default async (req) => {
     case 'addItem': {
       const i = b.item; if (!okItem(i)) return json({ error: 'Bad item' }, 400);
       if (state.items.length >= 500) return json({ error: 'Too many items' }, 400);
-      if (!state.items.some(x => x.id === i.id)) state.items.push({ id: i.id, name: clean(i.name), loc: ['Fridge', 'Freezer', 'Pantry'].includes(i.loc) ? i.loc : 'Fridge', exp: i.exp, qty: num(i.qty, 1, 99, 1), ts: num(i.ts, 0, 9e15, Date.now()) });
+      if (!state.items.some(x => x.id === i.id)) state.items.push({ id: i.id, name: clean(i.name), loc: ['Fridge', 'Freezer', 'Pantry'].includes(i.loc) ? i.loc : 'Fridge', exp: i.exp, qty: num(i.qty, 1, 99, 1), ...(CATS.includes(i.cat) ? { cat: i.cat } : {}), ts: num(i.ts, 0, 9e15, Date.now()) });
       break;
     }
     case 'removeItem': state.items = state.items.filter(x => x.id !== b.id); break;
@@ -37,6 +38,7 @@ export default async (req) => {
         if ('qty' in f) n.qty = num(f.qty, 1, 99, x.qty);
         if ('name' in f) n.name = clean(f.name) || x.name;
         if ('loc' in f && ['Fridge', 'Freezer', 'Pantry'].includes(f.loc)) n.loc = f.loc;
+        if ('cat' in f && CATS.includes(f.cat)) n.cat = f.cat;
         if ('exp' in f && /^\d{4}-\d{2}-\d{2}$/.test(f.exp)) n.exp = f.exp;
         return n;
       });

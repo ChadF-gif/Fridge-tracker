@@ -14,7 +14,7 @@ const LOCS = ['Fridge', 'Freezer', 'Pantry'];
 const CUISINES = ['Any', 'Italian', 'Mexican', 'Asian', 'American', 'Mediterranean', 'Indian', 'BBQ'];
 const DIETS = ['Vegetarian', 'Vegan', 'Gluten-free', 'Dairy-free', 'Low-carb', 'Kid-friendly'];
 
-const S = { items: [], shop: [], filter: 'All', addLoc: 'Fridge', qty: 1, ready: false, online: true, canWrite: true, canPhoto: true,
+const S = { items: [], shop: [], filter: 'All', cat: 'All', q: '', addCat: 'Other', catAuto: true, addLoc: 'Fridge', qty: 1, ready: false, online: true, canWrite: true, canPhoto: true,
   meals: null, house: { adults: 2, kids: 0 }, mealHouse: null, mealPrefs: '', mealNote: '', busy: false, err: '', enter: false, mealEnter: false,
   cuisine: 'Any', diets: [], receipt: [], editId: null, expAuto: true, scanCode: null, reading: false, receiptBusy: false };
 
@@ -28,7 +28,7 @@ const saveBarcodes = () => lsSet('chill-barcodes', JSON.stringify(barcodes));
 
 // Typical days a food stays good once home. Estimates only; the package date wins.
 const SHELF = [
-  [/\bcans?\b|canned|broth|stock\b|soup/, 730], [/cheese|cheddar|mozzarella|parmesan/, 30], [/ground (beef|turkey|pork|chicken)|mince/, 2],
+  [/\bcans?\b|canned|broth|stock\b|soup/, 730], [/ketchup|mustard|mayo|dressing|\bsauce\b|\bjam\b|jelly|syrup|relish|vinegar|pickle|olives?\b|honey|peanut butter|marinade/, 180], [/cheese|cheddar|mozzarella|parmesan/, 30], [/ground (beef|turkey|pork|chicken)|mince/, 2],
   [/chicken|turkey/, 2], [/steak|roast|beef|lamb/, 4], [/pork|sausage|brat/, 4], [/bacon/, 7], [/salmon|fish|cod\b|tilapia|shrimp|scallop/, 2],
   [/deli|lunch meat|\bham\b|salami|turkey slices/, 5], [/hot dog/, 14], [/\beggs?\b/, 28], [/yogurt|yoghurt/, 14], [/butter/, 60],
   [/milk|half and half|creamer/, 7], [/spinach|lettuce|salad|arugula|kale/, 5], [/berries|berry|strawberr|raspberr|blueberr/, 5],
@@ -44,6 +44,25 @@ function shelfLife(name, loc) {
   for (const [re, d] of SHELF) if (re.test(n)) return d;
   return null;
 }
+const CATS = ['Vegetables', 'Fruit', 'Protein', 'Dairy & Eggs', 'Condiments', 'Grains & Bread', 'Drinks', 'Snacks & Sweets', 'Leftovers', 'Other'];
+const CAT_RE = [
+  ['Leftovers', /leftover|meal prep|cooked /],
+  ['Snacks & Sweets', /ice cream|chips\b|cookie|candy|chocolate|popcorn|cracker|granola|pretzel|\bnuts?\b|peanuts|almonds|cashew|brownie|cake|pie\b|pudding|jerky|fruit snack/],
+  ['Condiments', /ketchup|mustard|mayo|dressing|\bsauce\b|salsa|hummus|\bjam\b|jelly|syrup|relish|vinegar|marinade|pickle|olives?\b|peanut butter|almond butter|hot sauce|bbq|guacamole|\bdip\b|honey|spread|seasoning|\bpesto\b/],
+  ['Drinks', /juice|soda|\bwater\b|beer|\bwine\b|coffee|\btea\b|kombucha|lemonade|gatorade|energy drink|sparkling|seltzer|cola\b/],
+  ['Dairy & Eggs', /milk|cheese|yogurt|yoghurt|butter|cream|\beggs?\b|half and half|creamer|kefir|ricotta|mozzarella|parmesan|cheddar/],
+  ['Protein', /chicken|beef|steak|pork|bacon|sausage|brat|\bham\b|turkey|lamb|salmon|\bfish\b|cod\b|tilapia|shrimp|scallop|tuna|tofu|tempeh|beans?\b|lentil|chickpea|hot dog|deli|salami|lunch meat|ground |meatball|patty|patties|brisket|ribs?\b|nugget/],
+  ['Vegetables', /spinach|lettuce|salad|arugula|kale|broccoli|cauliflower|carrot|onion|pepper|tomato|potato|cucumber|celery|mushroom|zucchini|squash|\bcorn\b|\bpeas?\b|garlic|cabbage|asparagus|green beans|brussels|beet|radish|\bveg|ginger|cilantro|parsley|basil|herbs?\b/],
+  ['Fruit', /apple|banana|orange|berry|berries|grape|lemon|\blime|melon|peach|pear\b|mango|pineapple|avocado|cherry|cherries|plum|kiwi|pomegranate|fruit/],
+  ['Grains & Bread', /bread|bagel|tortilla|pasta|\brice\b|flour|cereal|oats?\b|oatmeal|noodle|\bbuns?\b|\brolls?\b|pizza|waffle|pancake|muffin|biscuit|quinoa|couscous|spaghetti|macaroni/]
+];
+function guessCat(name) {
+  const n = String(name || '').toLowerCase();
+  if (!n.trim()) return 'Other';
+  for (const [c, re] of CAT_RE) if (re.test(n)) return c;
+  return 'Other';
+}
+const catOf = i => (i && CATS.includes(i.cat)) ? i.cat : guessCat(i && i.name);
 const buyList = r => (Array.isArray(r && r.ingredients) ? r.ingredients : []).filter(x => x && x.buy && x.name).map(x => String(x.name)).slice(0, 8);
 
 /* ---------- server calls ---------- */
@@ -160,7 +179,7 @@ function bump(id, delta) {
     want[id] = 0;
     queue(id, () => act(() => api.removeItem(id))).then(ok => {
       if (ok) toast('Used the last ' + it.name,
-        'Undo', () => act(() => api.addItem({ name: it.name, loc: it.loc || 'Fridge', exp: it.exp, qty: 1 })),
+        'Undo', () => act(() => api.addItem({ name: it.name, loc: it.loc || 'Fridge', exp: it.exp, qty: 1, cat: catOf(it) })),
         'Add to list', () => act(() => api.addShop(it.name), it.name + ' is on your list'));
     });
     return;
@@ -211,7 +230,14 @@ function renderFridge() {
 
   $('#filters').innerHTML = ['All'].concat(LOCS).map(l => '<button class="chip" data-filter="' + l + '" aria-pressed="' + (S.filter === l) + '">' + l + '</button>').join('');
 
-  const shown = all.filter(i => S.filter === 'All' || (i.loc || 'Fridge') === S.filter);
+  const counts = {}; all.forEach(i => { const c = catOf(i); counts[c] = (counts[c] || 0) + 1; });
+  if (S.cat !== 'All' && !counts[S.cat]) S.cat = 'All';
+  $('#catFilters').hidden = !all.length;
+  $('#catFilters').innerHTML = ['All'].concat(CATS.filter(c => counts[c])).map(c => '<button class="chip" data-cat="' + esc(c) + '" aria-pressed="' + (S.cat === c) + '">' + esc(c) + (c === 'All' ? '' : '<small>' + counts[c] + '</small>') + '</button>').join('');
+  const qq = S.q.trim().toLowerCase();
+
+  const shown = all.filter(i => (S.filter === 'All' || (i.loc || 'Fridge') === S.filter) && (S.cat === 'All' || catOf(i) === S.cat) &&
+    (!qq || String(i.name).toLowerCase().includes(qq) || catOf(i).toLowerCase().includes(qq)));
   const bands = [['Use first', x => daysLeft(x.exp) <= 3], ['This week', x => { const d = daysLeft(x.exp); return d > 3 && d <= 7; }], ['Later', x => daysLeft(x.exp) > 7]];
   let html = '', idx = 1;
   bands.forEach(([title, fn]) => {
@@ -219,7 +245,7 @@ function renderFridge() {
     if (rows.length) html += '<div class="band"><h2>' + title + '<em>' + rows.length + '</em></h2>' + rows.map(r => rowHtml(r, idx++)).join('') + '</div>';
   });
   if (!html && S.ready && !S.err) {
-    html = '<div class="empty"><span>' + (all.length ? 'Nothing in the ' + S.filter.toLowerCase() + '.' : 'Your fridge is empty. Scan a barcode or add the first item to start tracking.') + '</span>' +
+    html = '<div class="empty"><span>' + (all.length ? (qq ? 'No matches for "' + esc(S.q.trim()) + '".' : S.cat !== 'All' || S.filter !== 'All' ? 'Nothing here with those filters.' : 'Nothing here.') : 'Your fridge is empty. Scan a barcode or add the first item to start tracking.') + '</span>' +
       '<button class="btn" data-tab="add" style="padding:12px 22px">Add an item</button></div>';
   }
   const list = $('#list'); list.innerHTML = html; list.classList.toggle('enter', S.enter);
@@ -259,6 +285,7 @@ function renderMeals() {
 
 function renderAdd() {
   $('#locSeg').innerHTML = LOCS.map(l => '<button type="button" class="chip" data-loc="' + l + '" aria-pressed="' + (S.addLoc === l) + '">' + l + '</button>').join('');
+  $('#catSeg').innerHTML = CATS.map(c => '<button type="button" class="chip" data-addcat="' + esc(c) + '" aria-pressed="' + (S.addCat === c) + '">' + esc(c) + '</button>').join('');
   $('#qv').textContent = S.qty;
   $('#addTitle').textContent = S.editId ? 'Edit item' : 'Add an item';
   $('#addBtn').textContent = S.editId ? 'Save changes' : 'Add to Chill';
@@ -295,16 +322,17 @@ function suggestExp() {
   if (d) { $('#exp').value = plus(d); hint.textContent = 'Estimated from typical shelf life. Check the package.'; }
   else { $('#exp').value = ''; hint.textContent = ''; }
 }
-$('#name').addEventListener('input', suggestExp);
+function syncCat() { if (S.catAuto && !S.editId) S.addCat = guessCat($('#name').value); }
+$('#name').addEventListener('input', () => { suggestExp(); syncCat(); renderAdd(); });
 $('#exp').addEventListener('input', () => { S.expAuto = false; $('#dateHint').textContent = ''; });
 
 function endEdit() {
-  S.editId = null; S.qty = 1; S.expAuto = true; S.scanCode = null;
+  S.editId = null; S.qty = 1; S.expAuto = true; S.scanCode = null; S.catAuto = true; S.addCat = 'Other';
   $('#name').value = ''; $('#exp').value = ''; $('#dateHint').textContent = ''; $('#addMsg').textContent = '';
   renderAdd();
 }
 function stockFromShop(text) {
-  endEdit(); $('#name').value = text; S.addLoc = 'Fridge'; suggestExp(); renderAdd(); setTab('add');
+  endEdit(); $('#name').value = text; S.addLoc = 'Fridge'; suggestExp(); syncCat(); renderAdd(); setTab('add');
 }
 
 $('#addForm').addEventListener('submit', async e => {
@@ -315,15 +343,15 @@ $('#addForm').addEventListener('submit', async e => {
   const q = S.qty;
   if (S.editId) {
     const eid = S.editId;
-    const okE = await act(() => api.updateItem(eid, { name, loc: S.addLoc, exp, qty: q }), 'Saved');
+    const okE = await act(() => api.updateItem(eid, { name, loc: S.addLoc, exp, qty: q, cat: S.addCat }), 'Saved');
     if (okE) { endEdit(); setTab('fridge'); }
     return;
   }
   const code0 = S.scanCode;
-  const ok = await act(() => api.addItem({ name, loc: S.addLoc, exp, qty: q }), (q > 1 ? q + ' × ' : '') + name + ' added');
+  const ok = await act(() => api.addItem({ name, loc: S.addLoc, exp, qty: q, cat: S.catAuto ? guessCat(name) : S.addCat }), (q > 1 ? q + ' × ' : '') + name + ' added');
   if (ok) {
     if (code0) { barcodes[code0] = name; saveBarcodes(); }
-    $('#name').value = ''; $('#exp').value = ''; S.qty = 1; S.expAuto = true; S.scanCode = null; $('#dateHint').textContent = ''; msg.textContent = ''; setTab('fridge');
+    $('#name').value = ''; $('#exp').value = ''; S.qty = 1; S.expAuto = true; S.scanCode = null; S.catAuto = true; S.addCat = 'Other'; $('#dateHint').textContent = ''; msg.textContent = ''; setTab('fridge');
   }
 });
 
@@ -382,7 +410,7 @@ function stopScan() {
 }
 function onCode(c) { if (!scanRun) return; stopScan(); if (navigator.vibrate) { try { navigator.vibrate(60); } catch (e) {} } lookup(String(c)); }
 function fillName(n) {
-  endEdit(); $('#name').value = n.slice(0, 80); suggestExp();
+  endEdit(); $('#name').value = n.slice(0, 80); suggestExp(); syncCat();
   if (!$('#exp').value) {
     // Unknown food: guess a date so Add works right away. The person can change it.
     $('#exp').value = plus(S.addLoc === 'Pantry' ? 180 : 7); S.expAuto = false;
@@ -557,6 +585,8 @@ document.addEventListener('click', async e => {
   const el = e.target.closest('button'); if (!el) return;
   if (el.dataset.tab) return setTab(el.dataset.tab);
   if (el.dataset.filter) { S.filter = el.dataset.filter; return renderFridge(); }
+  if (el.dataset.cat) { S.cat = el.dataset.cat; return renderFridge(); }
+  if (el.dataset.addcat) { S.addCat = el.dataset.addcat; S.catAuto = false; return renderAdd(); }
   if (el.dataset.loc) { S.addLoc = el.dataset.loc; suggestExp(); return renderAdd(); }
   if (el.dataset.cuisine) { S.cuisine = el.dataset.cuisine; savePrefs(); return renderMeals(); }
   if (el.dataset.diet) {
@@ -570,14 +600,14 @@ document.addEventListener('click', async e => {
   switch (el.dataset.act) {
     case 'edit': {
       const it = S.items.find(i => i.id === id); if (!it) break;
-      S.editId = id; S.addLoc = LOCS.includes(it.loc) ? it.loc : 'Fridge'; S.qty = qtyOf(it); S.expAuto = false;
+      S.editId = id; S.addLoc = LOCS.includes(it.loc) ? it.loc : 'Fridge'; S.qty = qtyOf(it); S.expAuto = false; S.addCat = catOf(it); S.catAuto = false;
       $('#name').value = it.name; $('#exp').value = it.exp; $('#dateHint').textContent = ''; $('#addMsg').textContent = '';
       renderAdd(); setTab('add'); break;
     }
     case 'canceledit': endEdit(); setTab('fridge'); break;
     case 'receiptadd': {
       const picks = S.receipt.filter(x => x.on), added = [];
-      for (const x of picks) { if (await act(() => api.addItem({ name: x.name, loc: x.loc, exp: x.exp, qty: x.qty }))) added.push(x); else break; }
+      for (const x of picks) { if (await act(() => api.addItem({ name: x.name, loc: x.loc, exp: x.exp, qty: x.qty, cat: guessCat(x.name) }))) added.push(x); else break; }
       S.receipt = S.receipt.filter(x => !added.includes(x)); renderReceipt();
       if (added.length === picks.length && picks.length) { toast(added.length + (added.length === 1 ? ' item' : ' items') + ' added'); setTab('fridge'); }
       break;
@@ -622,6 +652,8 @@ document.addEventListener('change', e => {
   }
   if (t.dataset && t.dataset.r != null) { const x = S.receipt[Number(t.dataset.r)]; if (x) { x.on = t.checked; renderReceipt(); } }
 });
+
+$('#q').addEventListener('input', e => { S.q = e.target.value; renderFridge(); });
 
 /* ---------- start ---------- */
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); }); }

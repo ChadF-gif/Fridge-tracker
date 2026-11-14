@@ -31,6 +31,8 @@
   <section class="screen on" id="s-fridge" aria-label="Fridge">
     <div id="summary"></div>
     <div id="notice"></div>
+    <div class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg><input type="search" id="q" placeholder="Search your fridge" aria-label="Search your fridge" autocomplete="off" autocapitalize="off" enterkeyhint="search"></div>
+    <div class="chips" id="catFilters" role="group" aria-label="Filter by category"></div>
     <div class="chips" id="filters" role="group" aria-label="Filter by place"></div>
     <div id="list"></div>
   </section>
@@ -52,6 +54,9 @@
       <label for="name">Item
         <input type="text" id="name" placeholder="Black beans (cans)" maxlength="80">
       </label>
+      <div class="lab">Category
+        <div class="chips wrap" id="catSeg" role="group" aria-label="Category"></div>
+      </div>
       <div class="two">
         <div class="lab">Quantity
           <div class="step big" role="group" aria-label="Quantity">
