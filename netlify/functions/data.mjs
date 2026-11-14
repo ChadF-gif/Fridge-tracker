@@ -49,7 +49,7 @@ export default async (req) => {
     case 'addShop': {
       const s = b.shop; if (!s || typeof s.id !== 'string' || s.id.length > 64) return json({ error: 'Bad entry' }, 400);
       if (state.shop.length >= 300) return json({ error: 'List is full' }, 400);
-      if (!state.shop.some(x => x.id === s.id)) state.shop.push({ id: s.id, text: clean(s.text), done: false, ts: num(s.ts, 0, 9e15, Date.now()) });
+      if (!state.shop.some(x => x.id === s.id)) state.shop.push({ id: s.id, text: clean(s.text), done: false, ...(s.sug ? { sug: true } : {}), ts: num(s.ts, 0, 9e15, Date.now()) });
       break;
     }
     case 'updateShop': state.shop = state.shop.map(x => x.id === b.id ? { ...x, done: !!(b.fields && b.fields.done) } : x); break;

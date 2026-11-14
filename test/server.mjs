@@ -9,7 +9,7 @@ http.createServer(async (req, res) => {
     if (req.headers['x-household-code'] !== 'pizza') { res.writeHead(401, { 'content-type': 'application/json' }); return res.end('{"error":"Wrong code","code":"unauthorized"}'); }
     let body = ''; for await (const c of req) body += c;
     res.writeHead(200, { 'content-type': 'application/json' });
-    if (u.pathname === '/api/ai') return res.end(JSON.stringify({ text: recipe(Math.floor(Math.random() * 99)) }));
+    if (u.pathname === '/api/ai') return res.end(JSON.stringify({ text: body.includes('grocery items') ? JSON.stringify([{ item: 'Pasta', why: 'goes with chicken' }, { item: 'Cheddar cheese', why: 'dup' }, { item: 'Tortillas', why: 'for beans' }]) : recipe(Math.floor(Math.random() * 99)) }));
     if (req.method === 'POST') {
       const b = JSON.parse(body);
       if (b.op === 'addItem') state.items.push(b.item);

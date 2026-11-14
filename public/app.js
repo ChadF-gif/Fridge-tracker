@@ -73,7 +73,7 @@ const api = {
   removeItem: async id => { S.items = S.items.filter(i => i.id !== id); render(); await send('removeItem', { id }); },
   setQty: async (id, qty) => { S.items = S.items.map(i => i.id === id ? Object.assign({}, i, { qty }) : i); render(); await send('updateItem', { id, fields: { qty } }); },
   updateItem: async (id, o) => { S.items = S.items.map(i => i.id === id ? Object.assign({}, i, o) : i); render(); await send('updateItem', { id, fields: o }); },
-  addShop: async text => { const s = { id: uid(), text, done: false, ts: Date.now() }; S.shop = S.shop.concat(s); render(); await send('addShop', { shop: s }); },
+  addShop: async (text, sug) => { const s = { id: uid(), text, done: false, ts: Date.now() }; if (sug) s.sug = true; S.shop = S.shop.concat(s); render(); await send('addShop', { shop: s }); },
   toggleShop: async (id, done) => { S.shop = S.shop.map(s => s.id === id ? Object.assign({}, s, { done }) : s); render(); await send('updateShop', { id, fields: { done } }); },
   removeShop: async id => { S.shop = S.shop.filter(s => s.id !== id); render(); await send('removeShop', { id }); },
   setHouse: async h => { await send('setHouse', { adults: h.adults, kids: h.kids }); }
@@ -228,7 +228,7 @@ function renderFridge() {
 function renderShop() {
   const rows = S.shop.slice().sort((a, b) => (a.done - b.done) || ((a.ts || 0) - (b.ts || 0)));
   $('#shopList').innerHTML = rows.length ? rows.map(s =>
-    '<div class="shop' + (s.done ? ' done' : '') + '"><input type="checkbox" data-shopid="' + esc(s.id) + '"' + (s.done ? ' checked' : '') + ' aria-label="Got ' + esc(s.text) + '"><span>' + esc(s.text) + '</span>' +
+    '<div class="shop' + (s.done ? ' done' : '') + '"><input type="checkbox" data-shopid="' + esc(s.id) + '"' + (s.done ? ' checked' : '') + ' aria-label="Got ' + esc(s.text) + '"><span>' + esc(s.text) + (s.sug ? '<em class="tag sug">Suggested</em>' : '') + '</span>' +
     '<button class="x" data-act="rmshop" data-id="' + esc(s.id) + '" aria-label="Remove ' + esc(s.text) + '">&times;</button></div>').join('')
     : '<div class="empty">Nothing on the list. Items you restock from the fridge land here.</div>';
 }
@@ -275,7 +275,7 @@ function renderSync() {
   el.lastElementChild.textContent = !S.ready ? 'Loading' : S.online ? 'Shared and live' : 'Offline';
 }
 
-function render() { renderSync(); renderFridge(); renderAdd(); renderMeals(); renderShop(); }
+function render() { renderSmart(); renderSync(); renderFridge(); renderAdd(); renderMeals(); renderShop(); }
 
 function setTab(t) {
   if (!['fridge', 'add', 'meals', 'shop'].includes(t)) t = 'fridge';
@@ -283,6 +283,7 @@ function setTab(t) {
   document.querySelectorAll('#tabs button').forEach(b => { if (b.dataset.tab === t) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   if (location.hash !== '#' + t) location.hash = t;
   window.scrollTo(0, 0);
+  if (t === 'shop') maybeAutoSuggest();
   if (t === 'fridge' && S.ready) { S.enter = true; renderFridge(); clearEnter(); }
 }
 window.addEventListener('hashchange', () => setTab(location.hash.slice(1)));
@@ -508,6 +509,42 @@ $('#mealBtn').addEventListener('click', async () => {
   else { S.mealNote = ok.length < 3 ? 'Only ' + ok.length + (ok.length === 1 ? ' idea' : ' ideas') + ' came back. Tap again for more.' : ''; S.mealEnter = true; clearEnter(); }
   S.busy = false; renderMeals();
 });
+
+/* ---------- smart shopping suggestions ---------- */
+let smartOn = lsGet('chill-smart') === '1', smartBusy = false;
+function renderSmart() {
+  $('#smartToggle').checked = smartOn;
+  $('#smartBtn').hidden = !smartOn; $('#smartBtn').disabled = smartBusy;
+  $('#smartBtn').textContent = smartBusy ? 'Thinking\u2026' : 'Suggest again';
+}
+async function smartSuggest(manual) {
+  if (smartBusy || !S.ready) return;
+  const have = S.items.filter(i => i.exp && daysLeft(i.exp) >= 0);
+  const msg = $('#smartMsg');
+  if (!have.length) { msg.textContent = 'Add a few items to the fridge first, then I can suggest what goes with them.'; return; }
+  smartBusy = true; msg.textContent = 'Looking at what you have\u2026'; renderSmart();
+  try {
+    const stock = have.sort(byExp).slice(0, 40).map(i => '- ' + i.name + ' x' + qtyOf(i) + ' (' + daysLeft(i.exp) + ' days left)').join('\n');
+    const list = S.shop.filter(x => !x.done).map(x => x.text).join(', ') || 'nothing';
+    const diet = S.diets.length ? ' Dietary needs: ' + S.diets.join(', ') + '.' : '';
+    const r = await aiJson('A household has these items (with days until they expire):\n' + stock + '\n\nAlready on their shopping list: ' + list + '.\nSuggest 3 to 5 grocery items to buy that would turn what they have into complete dinners, especially meals that use the items expiring soonest. Also include any pantry staple that is down to its last one and clearly needed. Do not suggest anything they already have or that is on the list. Household: ' + S.house.adults + ' adults, ' + S.house.kids + ' kids.' + diet + ' Reply with only a JSON array of objects: {"item": short grocery name, "why": under 8 words}.', null, 500);
+    const known = S.shop.map(x => x.text.toLowerCase()).concat(have.map(i => i.name.toLowerCase()));
+    const picks = (Array.isArray(r) ? r : []).filter(x => x && x.item).slice(0, 5).filter(x => { const n = String(x.item).toLowerCase(); return !known.some(k => k === n || k.includes(n) || n.includes(k)); });
+    for (const x of picks) if (!(await act(() => api.addShop(String(x.item).slice(0, 80), true)))) break;
+    msg.textContent = picks.length ? 'Added ' + picks.length + (picks.length === 1 ? ' suggestion' : ' suggestions') + ': ' + picks.map(x => x.item + (x.why ? ' (' + x.why + ')' : '')).join(', ') + '.' : (manual ? 'Nothing new to suggest right now.' : '');
+    lsSet('chill-smart-ts', String(Date.now()));
+  } catch (err) { msg.textContent = aiError(err); }
+  finally { smartBusy = false; renderSmart(); }
+}
+function maybeAutoSuggest() {
+  if (!smartOn || !S.ready) return;
+  if (Date.now() - Number(lsGet('chill-smart-ts') || 0) > 6 * 36e5) smartSuggest(false);
+}
+$('#smartToggle').addEventListener('change', e => {
+  smartOn = e.target.checked; lsSet('chill-smart', smartOn ? '1' : '0'); renderSmart();
+  if (smartOn) smartSuggest(true); else $('#smartMsg').textContent = '';
+});
+$('#smartBtn').addEventListener('click', () => smartSuggest(true));
 
 /* ---------- clicks ---------- */
 document.addEventListener('click', async e => {

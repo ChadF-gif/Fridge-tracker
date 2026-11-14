@@ -118,6 +118,11 @@
       <h2>Shopping list</h2>
       <input type="text" id="shopIn" placeholder="Add something and press Enter" maxlength="80" aria-label="Add to shopping list">
     </form>
+    <div class="card smart" id="smartCard">
+      <label class="smartrow"><span><b>Smart suggestions</b><small>Adds a few items that would complete meals with what you have. Remove any you don't want.</small></span><input type="checkbox" id="smartToggle" role="switch" aria-label="Smart suggestions"></label>
+      <button type="button" class="btn ghost" id="smartBtn" hidden>Suggest again</button>
+      <p class="hint" id="smartMsg" aria-live="polite"></p>
+    </div>
     <div id="shopList" style="display:flex;flex-direction:column;gap:10px"></div>
   </section>
 </div>
