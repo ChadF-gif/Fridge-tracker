@@ -15,7 +15,7 @@ const CUISINES = ['Any', 'Italian', 'Mexican', 'Asian', 'American', 'Mediterrane
 const DIETS = ['Vegetarian', 'Vegan', 'Gluten-free', 'Dairy-free', 'Low-carb', 'Kid-friendly'];
 
 const S = { items: [], shop: [], filter: 'All', cat: 'All', q: '', addCat: 'Other', catAuto: true, addLoc: 'Fridge', qty: 1, ready: false, online: true, canWrite: true, canPhoto: true,
-  plan: [], favs: [], autoRestock: false, genning: new Set(), collapsed: new Set(), favPick: null, favSlot: 'Dinner', mealView: 'plan', weekOff: 0, addSlot: null, planPick: null, planBusy: false, meals: null, house: { adults: 2, kids: 0 }, mealHouse: null, mealPrefs: '', mealNote: '', busy: false, err: '', enter: false, mealEnter: false,
+  plan: [], favs: [], autoRestock: false, genning: new Set(), collapsed: new Set(), favPick: null, favEdit: null, favSlot: 'Dinner', mealView: 'plan', weekOff: 0, addSlot: null, planPick: null, planBusy: false, meals: null, house: { adults: 2, kids: 0 }, mealHouse: null, mealPrefs: '', mealNote: '', busy: false, err: '', enter: false, mealEnter: false,
   cuisine: 'Any', diets: [], receipt: [], editId: null, expAuto: true, scanCode: null, reading: false, receiptBusy: false };
 
 function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -99,6 +99,7 @@ const api = {
   removePlan: async id => { S.plan = S.plan.filter(x => x.id !== id); render(); await send('removePlan', { id }); },
   setPlanRecipe: async (id, recipe) => { S.plan = S.plan.map(x => x.id === id ? Object.assign({}, x, { recipe }) : x); render(); await send('setPlanRecipe', { id, recipe }); },
   addFav: async o => { const f = Object.assign({ id: uid(), ts: Date.now() }, o); S.favs = S.favs.concat(f); render(); await send('addFav', { fav: f }); },
+  renameFav: async (id, title) => { S.favs = S.favs.map(x => x.id === id ? Object.assign({}, x, { title }) : x); render(); await send('renameFav', { id, title }); },
   removeFav: async id => { S.favs = S.favs.filter(x => x.id !== id); render(); await send('removeFav', { id }); },
   setSettings: async o => { Object.assign(S, o); render(); await send('setSettings', o); },
   setHouse: async h => { await send('setHouse', { adults: h.adults, kids: h.kids }); }
@@ -575,12 +576,13 @@ $('#favPhoto').addEventListener('change', async e => {
   try {
     const r = await aiJson('These photos show one recipe (a cookbook page, recipe card, screenshot or handwriting; several photos are pages of the same recipe). Copy it faithfully. Keep the original amounts exactly as written and do not scale, convert or invent anything. Reply with only one JSON object: {"title": the dish name, "minutes": total time as a number or "", "cuisine": a one or two word style label, "serving": the yield as written such as "4 servings" or "", "ingredients": [{"name": the ingredient only, "amount": the measurement as written such as "1 1/2 cups" or "2 cloves"}], "steps": [each step in order as a short string, keeping temperatures and times]}. If the photos are not a recipe, reply {"error": "not a recipe"}.', files, 2000, 1800);
     if (!r || r.error || !r.title || !Array.isArray(r.ingredients) || !r.ingredients.length) { msg.textContent = 'I could not find a recipe in that photo. Try a clearer, closer shot.'; return; }
-    const title = String(r.title).slice(0, 80);
+    const typed = $('#favName').value.trim();
+    const title = (typed || String(r.title)).slice(0, 80);
     if (isFav(title)) { msg.textContent = '"' + title + '" is already in your favorites.'; return; }
     const rc = { minutes: r.minutes === '' || r.minutes == null ? '' : r.minutes, cuisine: r.cuisine || '', serving: String(r.serving || '').slice(0, 40),
       ingredients: r.ingredients.filter(x => x && x.name).slice(0, 40).map(x => ({ name: String(x.name), amount: String(x.amount || ''), buy: false })),
       steps: (Array.isArray(r.steps) ? r.steps : []).slice(0, 20).map(String) };
-    if (await act(() => api.addFav({ title, recipe: rc }))) msg.textContent = 'Saved "' + title + '". Check the amounts against your photo.';
+    if (await act(() => api.addFav({ title, recipe: rc }))) { msg.textContent = 'Saved "' + title + '". Check the amounts against your photo. Tap Rename if the name is off.'; $('#favName').value = ''; }
   } catch (err) { msg.textContent = aiError(err); }
   finally { btn.disabled = false; }
 });
@@ -643,7 +645,8 @@ function renderFavs() {
     const rc = f.recipe, has = rc && Array.isArray(rc.ingredients) && rc.ingredients.length;
     return '<div class="card recipe"><h3>' + esc(f.title) + '</h3><div class="meta">' + (rc && rc.cuisine ? esc(rc.cuisine) + ' \u00b7 ' : '') + (rc && rc.minutes ? esc(rc.minutes) + ' min \u00b7 ' : '') + (has ? forWho(rc) : 'Recipe is written when you plan it') + '</div>' +
       (has ? '<details class="pr" style="margin-top:0"><summary>Recipe</summary>' + recipeBody(rc) + '</details>' : '') +
-      '<div class="favact"><button type="button" class="btn" data-act="favpick" data-id="' + esc(f.id) + '">Add to plan</button><button type="button" class="btn ghost" data-act="rmfav" data-id="' + esc(f.id) + '">Remove</button></div>' +
+      '<div class="favact"><button type="button" class="btn" data-act="favpick" data-id="' + esc(f.id) + '">Add to plan</button><button type="button" class="btn ghost" data-act="renamefav" data-id="' + esc(f.id) + '">Rename</button><button type="button" class="btn ghost" data-act="rmfav" data-id="' + esc(f.id) + '">Remove</button></div>' +
+      (S.favEdit === f.id ? '<form class="favren" data-id="' + esc(f.id) + '"><input type="text" name="t" maxlength="80" value="' + esc(f.title) + '" aria-label="Recipe name" autocomplete="off"><button type="submit">Save</button><button type="button" data-act="cancelren">Cancel</button></form>' : '') +
       (S.favPick === f.id ? '<div class="planpick"><span class="hint" style="min-height:0">Which meal?</span><div class="chips wrap">' + SLOTS.map(sl => '<button type="button" class="chip" data-act="favslot" data-slot="' + sl + '" aria-pressed="' + (S.favSlot === sl) + '">' + sl + '</button>').join('') + '</div><span class="hint" style="min-height:0">Which day?</span><div class="chips wrap">' +
         week.map((d, k) => '<button type="button" class="chip" data-act="favdate" data-id="' + esc(f.id) + '" data-date="' + iso(d) + '">' + (k === 0 ? 'Today' : d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })) + '</button>').join('') + '</div></div>' : '') + '</div>';
   }).join('') : '<div class="empty"><span>No favorites yet. Tap the heart on a planned meal, or Save to favorites on any suggestion.</span></div>';
@@ -702,6 +705,15 @@ function dinnersAi() {
 }
 $('#planAi').addEventListener('click', dinnersAi);
 document.addEventListener('submit', async e => {
+  const fr = e.target.closest && e.target.closest('form.favren');
+  if (fr) {
+    e.preventDefault();
+    const t = fr.elements.t.value.trim().slice(0, 80), id = fr.dataset.id; if (!t) return;
+    if (S.favs.some(x => x.id !== id && String(x.title).toLowerCase() === t.toLowerCase())) { toast('You already have a favorite with that name.'); return; }
+    S.favEdit = null;
+    await act(() => api.renameFav(id, t), 'Renamed');
+    return;
+  }
   const f = e.target.closest && e.target.closest('form.padd'); if (!f) return;
   e.preventDefault();
   const title = f.elements.t.value.trim(); if (!title) return;
@@ -800,6 +812,8 @@ document.addEventListener('click', async e => {
       if (ex) { await act(() => api.removeFav(ex.id), 'Removed from favorites'); break; }
       await act(() => api.addFav({ title: String(r.title).slice(0, 80), recipe: recipeFrom(r, S.mealHouse || S.house) }), 'Saved to favorites'); renderMeals(); break;
     }
+    case 'renamefav': S.favEdit = S.favEdit === id ? null : id; renderFavs(); { const i = document.querySelector('form.favren input'); if (i) { i.focus(); i.select(); } } break;
+    case 'cancelren': S.favEdit = null; renderFavs(); break;
     case 'rmfav': await act(() => api.removeFav(id)); break;
     case 'favpick': S.favPick = S.favPick === id ? null : id; renderFavs(); break;
     case 'favslot': S.favSlot = el.dataset.slot; renderFavs(); break;

@@ -100,6 +100,7 @@
     </div>
     <div id="mealFavs" style="display:flex;flex-direction:column;gap:14px">
       <div class="card"><h2>Favorites</h2><p class="hint" style="min-height:0">Meals you love, saved with their recipes. Tap Add to plan to drop one on any day.</p>
+        <label class="lab" style="margin-top:12px">Name for the recipe (optional)<input type="text" id="favName" maxlength="80" placeholder="Leave blank to use the name on the page" autocomplete="off"></label>
         <button type="button" class="btn" id="favPhotoBtn" style="margin-top:12px">Add a recipe from a photo</button>
         <input type="file" id="favPhoto" accept="image/*" multiple hidden>
         <p class="hint" id="favMsg" role="status" style="min-height:0;margin:10px 0 0"></p></div>

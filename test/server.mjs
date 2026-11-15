@@ -22,6 +22,7 @@ http.createServer(async (req, res) => {
       if (b.op === 'removePlan') state.plan = state.plan.filter(x => x.id !== b.id);
       if (b.op === 'setPlanRecipe') state.plan = state.plan.map(x => x.id === b.id ? { ...x, recipe: b.recipe } : x);
       if (b.op === 'addFav') state.favs.push(b.fav);
+      if (b.op === 'renameFav') state.favs = state.favs.map(x => x.id === b.id ? { ...x, title: b.title } : x);
       if (b.op === 'removeFav') state.favs = state.favs.filter(x => x.id !== b.id);
       if (b.op === 'setSettings') state.settings = { autoRestock: !!b.autoRestock };
       if (b.op === 'setHouse') state.house = { adults: b.adults, kids: b.kids };

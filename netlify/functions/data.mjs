@@ -81,6 +81,11 @@ export default async (req) => {
       if (!state.favs.some(x => x.id === f.id || String(x.title).toLowerCase() === t)) state.favs.push({ id: f.id, title: clean(f.title), ...(rc ? { recipe: rc } : {}), ts: num(f.ts, 0, 9e15, Date.now()) });
       break;
     }
+    case 'renameFav': {
+      const t = clean(b.title).trim(); if (!t) return json({ error: 'Bad name' }, 400);
+      if (state.favs.some(x => x.id !== b.id && String(x.title).toLowerCase() === t.toLowerCase())) return json({ error: 'Already a favorite' }, 409);
+      state.favs = state.favs.map(x => x.id === b.id ? { ...x, title: t } : x); break;
+    }
     case 'removeFav': state.favs = state.favs.filter(x => x.id !== b.id); break;
     case 'setSettings': state.settings = { ...state.settings, autoRestock: !!b.autoRestock }; if (state.settings.autoRestock) restock(state); break;
     case 'removePlan': state.plan = state.plan.filter(x => x.id !== b.id); break;
