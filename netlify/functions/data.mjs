@@ -10,9 +10,9 @@ const CATS = ['Vegetables', 'Fruit', 'Protein', 'Dairy & Eggs', 'Condiments', 'G
 function cleanRecipe(r) {
   if (!r || !Array.isArray(r.ingredients) || !r.ingredients.length) return null;
   return {
-    minutes: clean(r.minutes, 10), cuisine: clean(r.cuisine, 30), adults: num(r.adults, 0, 12, 0), kids: num(r.kids, 0, 12, 0),
-    ingredients: r.ingredients.slice(0, 25).map(x => ({ name: clean(x && x.name, 60), amount: clean(x && x.amount, 30), buy: !!(x && x.buy) })),
-    steps: (Array.isArray(r.steps) ? r.steps : []).slice(0, 10).map(t => clean(t, 300))
+    minutes: clean(r.minutes, 10), cuisine: clean(r.cuisine, 30), serving: clean(r.serving, 40), adults: num(r.adults, 0, 12, 0), kids: num(r.kids, 0, 12, 0),
+    ingredients: r.ingredients.slice(0, 40).map(x => ({ name: clean(x && x.name, 80), amount: clean(x && x.amount, 40), buy: !!(x && x.buy) })),
+    steps: (Array.isArray(r.steps) ? r.steps : []).slice(0, 20).map(t => clean(t, 400))
   };
 }
 const okItem = i => i && typeof i.id === 'string' && i.id.length <= 64 && /^\d{4}-\d{2}-\d{2}$/.test(i.exp || '');

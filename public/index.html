@@ -99,7 +99,10 @@
       <div id="weekDays" style="display:flex;flex-direction:column;gap:12px"></div>
     </div>
     <div id="mealFavs" style="display:flex;flex-direction:column;gap:14px">
-      <div class="card"><h2>Favorites</h2><p class="hint" style="min-height:0">Meals you love, saved with their recipes. Tap Add to plan to drop one on any day.</p></div>
+      <div class="card"><h2>Favorites</h2><p class="hint" style="min-height:0">Meals you love, saved with their recipes. Tap Add to plan to drop one on any day.</p>
+        <button type="button" class="btn" id="favPhotoBtn" style="margin-top:12px">Add a recipe from a photo</button>
+        <input type="file" id="favPhoto" accept="image/*" multiple hidden>
+        <p class="hint" id="favMsg" role="status" style="min-height:0;margin:10px 0 0"></p></div>
       <div id="favList" style="display:flex;flex-direction:column;gap:14px"></div>
     </div>
   </section>

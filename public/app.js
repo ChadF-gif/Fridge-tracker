@@ -473,9 +473,9 @@ function parseJson(t) {
   if (a >= 0 && b > a) { try { return JSON.parse(t.slice(a, b + 1)); } catch (e) {} }
   return undefined;
 }
-async function aiJson(prompt, files, max) {
+async function aiJson(prompt, files, max, px) {
   const images = [];
-  for (const f of files || []) images.push(await toJpeg(f));
+  for (const f of files || []) images.push(await toJpeg(f, px));
   const r = await call('ai', { method: 'POST', body: { prompt, images, max_tokens: max || 1200 } });
   const v = parseJson(r.text);
   if (v === undefined) throw { code: 'invalid_json' };
@@ -556,6 +556,35 @@ $('#mealBtn').addEventListener('click', async () => {
   S.busy = false; renderMeals();
 });
 
+/* ---------- recipe from a photo ---------- */
+const STAPLE = /^(salt|pepper|black pepper|kosher salt|water|oil|olive oil|vegetable oil|cooking spray|sugar|flour|ice)\b/i;
+const words = n => String(n).toLowerCase().split(/[^a-z]+/).filter(w => w.length >= 4).map(w => w.replace(/(ies|es|s)$/, ''));
+function markBuy(rc) {
+  const have = S.items.filter(i => i.exp && daysLeft(i.exp) >= 0).map(i => words(i.name));
+  return Object.assign({}, rc, { ingredients: rc.ingredients.map(x => {
+    const w = words(x.name);
+    const got = STAPLE.test(String(x.name).trim()) || have.some(h => h.some(a => w.some(b => a === b || a.includes(b) || b.includes(a))));
+    return Object.assign({}, x, { buy: !got });
+  }) });
+}
+$('#favPhotoBtn').addEventListener('click', () => $('#favPhoto').click());
+$('#favPhoto').addEventListener('change', async e => {
+  const files = Array.from(e.target.files || []).slice(0, 3); e.target.value = '';
+  if (!files.length) return;
+  const msg = $('#favMsg'), btn = $('#favPhotoBtn'); btn.disabled = true; msg.textContent = 'Reading the recipe\u2026';
+  try {
+    const r = await aiJson('These photos show one recipe (a cookbook page, recipe card, screenshot or handwriting; several photos are pages of the same recipe). Copy it faithfully. Keep the original amounts exactly as written and do not scale, convert or invent anything. Reply with only one JSON object: {"title": the dish name, "minutes": total time as a number or "", "cuisine": a one or two word style label, "serving": the yield as written such as "4 servings" or "", "ingredients": [{"name": the ingredient only, "amount": the measurement as written such as "1 1/2 cups" or "2 cloves"}], "steps": [each step in order as a short string, keeping temperatures and times]}. If the photos are not a recipe, reply {"error": "not a recipe"}.', files, 2000, 1800);
+    if (!r || r.error || !r.title || !Array.isArray(r.ingredients) || !r.ingredients.length) { msg.textContent = 'I could not find a recipe in that photo. Try a clearer, closer shot.'; return; }
+    const title = String(r.title).slice(0, 80);
+    if (isFav(title)) { msg.textContent = '"' + title + '" is already in your favorites.'; return; }
+    const rc = { minutes: r.minutes === '' || r.minutes == null ? '' : r.minutes, cuisine: r.cuisine || '', serving: String(r.serving || '').slice(0, 40),
+      ingredients: r.ingredients.filter(x => x && x.name).slice(0, 40).map(x => ({ name: String(x.name), amount: String(x.amount || ''), buy: false })),
+      steps: (Array.isArray(r.steps) ? r.steps : []).slice(0, 20).map(String) };
+    if (await act(() => api.addFav({ title, recipe: rc }))) msg.textContent = 'Saved "' + title + '". Check the amounts against your photo.';
+  } catch (err) { msg.textContent = aiError(err); }
+  finally { btn.disabled = false; }
+});
+
 /* ---------- meal plan ---------- */
 const SLOTS = ['Breakfast', 'Lunch', 'Dinner'];
 function weekStart(off) { const d = today0(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + off * 7); return d; }
@@ -566,7 +595,7 @@ function recipeFrom(r, hh) {
     ingredients: (Array.isArray(r.ingredients) ? r.ingredients : []).filter(x => x && x.name).slice(0, 25).map(x => ({ name: String(x.name), amount: String(x.amount || ''), buy: !!x.buy })),
     steps: (Array.isArray(r.steps) ? r.steps : []).slice(0, 10).map(String) };
 }
-function forWho(rc) { return rc && rc.adults ? 'for ' + rc.adults + (rc.adults === 1 ? ' adult' : ' adults') + (rc.kids ? ' + ' + rc.kids + (rc.kids === 1 ? ' kid' : ' kids') : '') : ''; }
+function forWho(rc) { return rc && !rc.adults && rc.serving ? 'makes ' + rc.serving : rc && rc.adults ? 'for ' + rc.adults + (rc.adults === 1 ? ' adult' : ' adults') + (rc.kids ? ' + ' + rc.kids + (rc.kids === 1 ? ' kid' : ' kids') : '') : ''; }
 function recipeBody(rc) {
   return '<div class="rb"><h5>Ingredients</h5><ul>' + rc.ingredients.map(x => '<li><b>' + esc(x.amount) + '</b> ' + esc(x.name) + (x.buy ? ' <em class="tag low">Buy</em>' : '') + '</li>').join('') + '</ul><h5>Steps</h5><ol>' + (rc.steps || []).map(t => '<li>' + esc(t) + '</li>').join('') + '</ol></div>';
 }
@@ -777,7 +806,7 @@ document.addEventListener('click', async e => {
     case 'favdate': {
       const f = S.favs.find(x => x.id === id); if (!f) break;
       const pid = uid(), date = el.dataset.date, slot = S.favSlot; S.favPick = null;
-      const ok = await act(() => api.addPlan({ id: pid, date, slot, title: f.title, ...(f.recipe ? { recipe: f.recipe } : {}) }));
+      const ok = await act(() => api.addPlan({ id: pid, date, slot, title: f.title, ...(f.recipe ? { recipe: f.recipe.serving && !f.recipe.adults ? markBuy(f.recipe) : f.recipe } : {}) }));
       if (ok) { const dt = new Date(date + 'T00:00:00'); toast(slot + ' planned for ' + dt.toLocaleDateString(undefined, { weekday: 'long' }), 'View plan', () => { S.mealView = 'plan'; setTab('meals'); const ws = new Date(dt); ws.setDate(ws.getDate() - ((ws.getDay() + 6) % 7)); S.weekOff = Math.round((ws - weekStart(0)) / (7 * 864e5)); render(); }); if (!f.recipe) genRecipe(pid); }
       renderFavs(); break;
     }
