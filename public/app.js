@@ -28,6 +28,7 @@ const saveBarcodes = () => lsSet('chill-barcodes', JSON.stringify(barcodes));
 
 // Typical days a food stays good once home. Estimates only; the package date wins.
 const SHELF = [
+  [/\bsalt\b|black pepper|white pepper|peppercorn|pepper flakes|paprika|cumin|oregano|thyme|rosemary|cinnamon|nutmeg|turmeric|cayenne|chili powder|garlic powder|onion powder|seasoning|spice|curry|bay leaf|bay leaves|allspice|\bdill\b|\bsage\b|baking soda|baking powder|vanilla/, 730],
   [/\bcans?\b|canned|broth|stock\b|soup/, 730], [/ketchup|mustard|mayo|dressing|\bsauce\b|\bjam\b|jelly|syrup|relish|vinegar|pickle|olives?\b|honey|peanut butter|marinade/, 180], [/cheese|cheddar|mozzarella|parmesan/, 30], [/ground (beef|turkey|pork|chicken)|mince/, 2],
   [/chicken|turkey/, 2], [/steak|roast|beef|lamb/, 4], [/pork|sausage|brat/, 4], [/bacon/, 7], [/salmon|fish|cod\b|tilapia|shrimp|scallop/, 2],
   [/deli|lunch meat|\bham\b|salami|turkey slices/, 5], [/hot dog/, 14], [/\beggs?\b/, 28], [/yogurt|yoghurt/, 14], [/butter/, 60],
@@ -44,11 +45,12 @@ function shelfLife(name, loc) {
   for (const [re, d] of SHELF) if (re.test(n)) return d;
   return null;
 }
-const CATS = ['Vegetables', 'Fruit', 'Protein', 'Dairy & Eggs', 'Condiments', 'Grains & Bread', 'Drinks', 'Snacks & Sweets', 'Leftovers', 'Other'];
+const CATS = ['Vegetables', 'Fruit', 'Protein', 'Dairy & Eggs', 'Spices', 'Condiments', 'Grains & Bread', 'Drinks', 'Snacks & Sweets', 'Leftovers', 'Other'];
 const CAT_RE = [
   ['Leftovers', /leftover|meal prep|cooked /],
   ['Snacks & Sweets', /ice cream|chips\b|cookie|candy|chocolate|popcorn|cracker|granola|pretzel|\bnuts?\b|peanuts|almonds|cashew|brownie|cake|pie\b|pudding|jerky|fruit snack/],
-  ['Condiments', /ketchup|mustard|mayo|dressing|\bsauce\b|salsa|hummus|\bjam\b|jelly|syrup|relish|vinegar|marinade|pickle|olives?\b|peanut butter|almond butter|hot sauce|bbq|guacamole|\bdip\b|honey|spread|seasoning|\bpesto\b/],
+  ['Spices', /\bsalt\b|black pepper|white pepper|peppercorn|pepper flakes|paprika|cumin|oregano|thyme|rosemary|cinnamon|nutmeg|turmeric|cayenne|chili powder|garlic powder|onion powder|seasoning|spice|curry|bay leaf|bay leaves|allspice|\bdill\b|\bsage\b|baking soda|baking powder|vanilla/],
+  ['Condiments', /ketchup|mustard|mayo|dressing|\bsauce\b|salsa|hummus|\bjam\b|jelly|syrup|relish|vinegar|marinade|pickle|olives?\b|peanut butter|almond butter|hot sauce|bbq|guacamole|\bdip\b|honey|spread|\bpesto\b/],
   ['Drinks', /juice|soda|\bwater\b|beer|\bwine\b|coffee|\btea\b|kombucha|lemonade|gatorade|energy drink|sparkling|seltzer|cola\b/],
   ['Dairy & Eggs', /milk|cheese|yogurt|yoghurt|butter|cream|\beggs?\b|half and half|creamer|kefir|ricotta|mozzarella|parmesan|cheddar/],
   ['Protein', /chicken|beef|steak|pork|bacon|sausage|brat|\bham\b|turkey|lamb|salmon|\bfish\b|cod\b|tilapia|shrimp|scallop|tuna|tofu|tempeh|beans?\b|lentil|chickpea|hot dog|deli|salami|lunch meat|ground |meatball|patty|patties|brisket|ribs?\b|nugget/],
@@ -302,6 +304,7 @@ const QUICK = [
   ['Protein', 'Fridge', ['Chicken breasts', 'Ground beef', 'Bacon', 'Sausage', 'Steak', 'Salmon', 'Shrimp', 'Deli meat', 'Hot dogs']],
   ['Dairy & eggs', 'Fridge', ['Eggs', 'Milk', 'Butter', 'Cheese', 'Shredded cheese', 'Yogurt', 'Sour cream', 'Cream cheese']],
   ['Bread & grains', 'Pantry', ['Bread', 'Tortillas', 'Bagels', 'Pasta', 'Rice', 'Cereal', 'Oats']],
+  ['Spices', 'Pantry', ['Salt', 'Black pepper', 'Garlic powder', 'Onion powder', 'Paprika', 'Cumin', 'Chili powder', 'Italian seasoning', 'Cajun seasoning', 'Cinnamon']],
   ['Pantry & sauces', 'Pantry', ['Ketchup', 'Mustard', 'Mayo', 'Peanut butter', 'Jelly', 'Soy sauce', 'Hot sauce', 'BBQ sauce', 'Salsa', 'Canned beans', 'Canned tomatoes', 'Chicken broth', 'Olive oil', 'Flour', 'Sugar']],
   ['Drinks & snacks', 'Pantry', ['Juice', 'Soda', 'Chips', 'Crackers']],
   ['Freezer', 'Freezer', ['Ice cream', 'Frozen pizza', 'Frozen vegetables', 'Chicken nuggets', 'Frozen fruit']]

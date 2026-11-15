@@ -6,7 +6,7 @@ const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, 
 const clean = (s, n = 80) => String(s == null ? '' : s).slice(0, n);
 const num = (v, lo, hi, d) => { const x = Math.round(Number(v)); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : d; };
 
-const CATS = ['Vegetables', 'Fruit', 'Protein', 'Dairy & Eggs', 'Condiments', 'Grains & Bread', 'Drinks', 'Snacks & Sweets', 'Leftovers', 'Other'];
+const CATS = ['Vegetables', 'Fruit', 'Protein', 'Dairy & Eggs', 'Spices', 'Condiments', 'Grains & Bread', 'Drinks', 'Snacks & Sweets', 'Leftovers', 'Other'];
 function cleanRecipe(r) {
   if (!r || !Array.isArray(r.ingredients) || !r.ingredients.length) return null;
   return {
