@@ -532,11 +532,17 @@ $('#photo').addEventListener('change', async e => {
 
 function renderReceipt() {
   $('#receiptBtn').disabled = !!S.receiptBusy;
+  $('#receiptBtn').textContent = S.receipt.length ? 'Photograph another receipt' : 'Photograph a receipt';
   const on = S.receipt.filter(x => x.on).length;
   $('#receiptList').innerHTML = S.receipt.length
-    ? '<div class="rlist">' + S.receipt.map((x, i) => '<label class="rrow"><input type="checkbox" data-r="' + i + '"' + (x.on ? ' checked' : '') + '><span class="rn">' + esc(x.name) + '</span><span class="rm">' +
-        (x.qty > 1 ? '×' + x.qty + ' · ' : '') + esc(x.loc) + ' · ' + fmtDate(x.exp) + '</span></label>').join('') + '</div>' +
-      '<button type="button" class="btn" data-act="receiptadd"' + (on ? '' : ' disabled') + '>Add ' + on + (on === 1 ? ' item' : ' items') + '</button>'
+    ? '<div class="rlist">' + S.receipt.map((x, i) =>
+        '<div class="ritem' + (x.on ? '' : ' off') + '"><div class="rtop"><input type="checkbox" data-r="' + i + '"' + (x.on ? ' checked' : '') + ' aria-label="Include this item">' +
+        '<input type="text" data-r="' + i + '" data-rf="name" value="' + esc(x.name) + '" maxlength="80" aria-label="Item name" autocomplete="off">' + (x.qty > 1 ? '<span class="rqty">×' + x.qty + '</span>' : '') + '</div>' +
+        '<div class="rfields"><select data-r="' + i + '" data-rf="cat" aria-label="Category">' + CATS.map(c => '<option' + (x.cat === c ? ' selected' : '') + '>' + esc(c) + '</option>').join('') + '</select>' +
+        '<select data-r="' + i + '" data-rf="loc" aria-label="Where it lives">' + LOCS.map(l => '<option' + (x.loc === l ? ' selected' : '') + '>' + l + '</option>').join('') + '</select>' +
+        '<input type="date" data-r="' + i + '" data-rf="exp" value="' + esc(x.exp) + '" aria-label="Expires"></div></div>').join('') + '</div>' +
+      '<button type="button" class="btn" data-act="receiptadd"' + (on ? '' : ' disabled') + '>Add ' + on + (on === 1 ? ' item' : ' items') + ' to Chill</button>' +
+      '<button type="button" class="btn ghost" data-act="receiptclear">Start over</button>'
     : '';
 }
 $('#receiptBtn').addEventListener('click', () => $('#receipt').click());
@@ -549,9 +555,10 @@ $('#receipt').addEventListener('change', async e => {
     S.receipt = (Array.isArray(r) ? r : []).filter(x => x && x.name).slice(0, 60).map(x => {
       const loc = LOCS.includes(x.loc) ? x.loc : 'Fridge';
       const d = shelfLife(x.name, loc) || Math.max(1, Math.min(1095, Math.round(Number(x.days) || 7)));
-      return { name: String(x.name).slice(0, 80), qty: Math.max(1, Math.min(99, Math.round(Number(x.qty) || 1))), loc, exp: plus(d), on: true };
+      const name = String(x.name).slice(0, 80);
+      return { name, qty: Math.max(1, Math.min(99, Math.round(Number(x.qty) || 1))), loc, exp: plus(d), on: true, cat: guessCat(name), auto: true, catAuto: true };
     });
-    msg.textContent = S.receipt.length ? 'Uncheck anything you do not want. Dates are estimates, so check the packages.' : 'No food items found. Try a clearer photo.';
+    msg.textContent = S.receipt.length ? 'Found ' + S.receipt.length + (S.receipt.length === 1 ? ' item' : ' items') + '. Check the name, category, location and date on each one. Dates are estimates, so change any that do not match the package.' : 'No food items found. Try a clearer photo.';
   } catch (err) { msg.textContent = aiError(err); }
   finally { S.receiptBusy = false; renderReceipt(); }
 });
@@ -936,12 +943,16 @@ document.addEventListener('click', async e => {
       break;
     }
     case 'receiptadd': {
-      const picks = S.receipt.filter(x => x.on), added = [];
-      for (const x of picks) { if (await act(() => api.addItem({ name: x.name, loc: x.loc, exp: x.exp, qty: x.qty, cat: guessCat(x.name) }))) added.push(x); else break; }
+      const picks = S.receipt.filter(x => x.on && String(x.name).trim()), added = [];
+      for (const x of picks) {
+        const exp = /^\d{4}-\d{2}-\d{2}$/.test(x.exp || '') ? x.exp : plus(shelfLife(x.name, x.loc) || (x.loc === 'Pantry' ? 180 : 7));
+        if (await act(() => api.addItem({ name: String(x.name).trim().slice(0, 80), loc: x.loc, exp, qty: x.qty, cat: CATS.includes(x.cat) ? x.cat : guessCat(x.name) }))) added.push(x); else break;
+      }
       S.receipt = S.receipt.filter(x => !added.includes(x)); renderReceipt();
-      if (added.length === picks.length && picks.length) { toast(added.length + (added.length === 1 ? ' item' : ' items') + ' added'); setTab('fridge'); }
+      if (added.length === picks.length && picks.length) { $('#receiptMsg').textContent = ''; toast(added.length + (added.length === 1 ? ' item' : ' items') + ' added'); setTab('fridge'); }
       break;
     }
+    case 'receiptclear': S.receipt = []; $('#receiptMsg').textContent = ''; renderReceipt(); break;
     case 'hminus': case 'hplus': {
       const k = el.dataset.who, step = el.dataset.act === 'hplus' ? 1 : -1;
       const h = { adults: S.house.adults, kids: S.house.kids };
@@ -980,7 +991,21 @@ document.addEventListener('change', e => {
     const row = S.shop.find(s => s.id === id);
     if (t.checked && row) toast('Got ' + row.text, 'Add to fridge', () => stockFromShop(row.text));
   }
-  if (t.dataset && t.dataset.r != null) { const x = S.receipt[Number(t.dataset.r)]; if (x) { x.on = t.checked; renderReceipt(); } }
+  if (t.dataset && t.dataset.r != null) {
+    const x = S.receipt[Number(t.dataset.r)], f = t.dataset.rf; if (!x) return;
+    if (!f) { x.on = t.checked; renderReceipt(); }
+    else if (f === 'name') { // no re-render here: it would swallow a tap on the Add button
+      x.name = t.value.trim().slice(0, 80);
+      if (x.catAuto) { x.cat = guessCat(x.name); const sel = t.closest('.ritem').querySelector('[data-rf=cat]'); if (sel) sel.value = x.cat; }
+    }
+    else if (f === 'cat') { x.cat = t.value; x.catAuto = false; }
+    else if (f === 'loc') { x.loc = t.value; if (x.auto) x.exp = plus(shelfLife(x.name, x.loc) || (x.loc === 'Pantry' ? 180 : 7)); renderReceipt(); }
+    else if (f === 'exp') { x.exp = t.value; x.auto = false; }
+  }
+});
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.dataset && t.dataset.rf === 'name') { const x = S.receipt[Number(t.dataset.r)]; if (x) x.name = t.value.trim().slice(0, 80); }
 });
 
 $('#q').addEventListener('input', e => { S.q = e.target.value; renderFridge(); });

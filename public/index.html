@@ -38,10 +38,10 @@
   </section>
 
   <section class="screen" id="s-add" aria-label="Add an item">
-    <div class="card" id="receiptCard" hidden>
-      <h2>Add from a receipt</h2>
-      <p class="hint" style="min-height:0">Photograph your grocery receipt. Claude lists the food on it and estimates how long each item lasts.</p>
-      <button type="button" class="btn ghost" id="receiptBtn">Photograph a receipt</button>
+    <div class="card" id="receiptCard">
+      <h2>Just went shopping?</h2>
+      <p class="hint" style="min-height:0">Photograph your receipt (up to 3 photos for a long one). I list what you bought, then you check the dates and where each item goes.</p>
+      <button type="button" class="btn" id="receiptBtn">Photograph a receipt</button>
       <input type="file" id="receipt" accept="image/*" multiple hidden>
       <p class="hint" id="receiptMsg" role="status"></p>
       <div id="receiptList"></div>

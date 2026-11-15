@@ -9,7 +9,7 @@ http.createServer(async (req, res) => {
     if (req.headers['x-household-code'] !== 'pizza') { res.writeHead(401, { 'content-type': 'application/json' }); return res.end('{"error":"Wrong code","code":"unauthorized"}'); }
     let body = ''; for await (const c of req) body += c;
     res.writeHead(200, { 'content-type': 'application/json' });
-    if (u.pathname === '/api/ai') return res.end(JSON.stringify({ text: body.includes('dinner ideas for these days') ? JSON.stringify(Array.from({length:7},(_,i)=>({title:'Planned dish '+i}))) : body.includes('grocery items') ? JSON.stringify([{ item: 'Pasta', why: 'goes with chicken' }, { item: 'Cheddar cheese', why: 'dup' }, { item: 'Tortillas', why: 'for beans' }]) : recipe(Math.floor(Math.random() * 99)) }));
+    if (u.pathname === '/api/ai') return res.end(JSON.stringify({ text: body.includes('grocery receipt') ? JSON.stringify([{ name: 'Chicken breasts', qty: 2, loc: 'Fridge', days: 2 }, { name: 'Whole milk', qty: 1, loc: 'Fridge', days: 7 }, { name: 'Black pepper', qty: 1, loc: 'Pantry', days: 700 }, { name: 'Mystery item', qty: 1, loc: 'Fridge', days: 9 }]) : body.includes('dinner ideas for these days') ? JSON.stringify(Array.from({length:7},(_,i)=>({title:'Planned dish '+i}))) : body.includes('grocery items') ? JSON.stringify([{ item: 'Pasta', why: 'goes with chicken' }, { item: 'Cheddar cheese', why: 'dup' }, { item: 'Tortillas', why: 'for beans' }]) : recipe(Math.floor(Math.random() * 99)) }));
     if (req.method === 'POST') {
       const b = JSON.parse(body);
       if (b.op === 'addItem') state.items.push(b.item);
