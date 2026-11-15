@@ -287,7 +287,7 @@ function renderMeals() {
   const who = hh.adults + (hh.adults === 1 ? ' adult' : ' adults') + (hh.kids ? ' + ' + hh.kids + (hh.kids === 1 ? ' kid' : ' kids') : '');
   box.innerHTML = (S.meals || []).map((r, n) => {
     const ing = Array.isArray(r.ingredients) ? r.ingredients.filter(x => x && x.name) : [];
-    return '<div class="card recipe" style="--i:' + n + '"><h3>' + esc(r.title) + '</h3><div class="meta">' + (r.cuisine ? esc(r.cuisine) + ' · ' : '') + esc(r.minutes) + ' min · for ' + esc(who) + haveTag(r) + '</div>' +
+    return '<div class="card recipe" style="--i:' + n + '">' + picHtml(r.title) + '<h3>' + esc(r.title) + '</h3><div class="meta">' + (r.cuisine ? esc(r.cuisine) + ' · ' : '') + esc(r.minutes) + ' min · for ' + esc(who) + haveTag(r) + '</div>' +
       '<h4>Ingredients</h4><ul class="ing">' + ing.map(x => '<li><b>' + esc(x.amount) + '</b><span>' + esc(x.name) + '</span>' + (x.buy ? '<em>Buy</em>' : '') + '</li>').join('') + '</ul>' +
       '<h4>Steps</h4><ol>' + (r.steps || []).map(st => '<li>' + esc(st) + '</li>').join('') + '</ol>' +
       (buyList(r).length ? '<button class="btn ghost" data-act="needs" data-n="' + n + '">Add what I\'m missing to the list</button>' : '') +
@@ -633,6 +633,50 @@ function recipeFrom(r, hh) {
     steps: (Array.isArray(r.steps) ? r.steps : []).slice(0, 10).map(String) };
 }
 function forWho(rc) { return rc && !rc.adults && rc.serving ? 'makes ' + rc.serving : rc && rc.adults ? 'for ' + rc.adults + (rc.adults === 1 ? ' adult' : ' adults') + (rc.kids ? ' + ' + rc.kids + (rc.kids === 1 ? ' kid' : ' kids') : '') : ''; }
+/* ---------- dish photos (example pictures from Wikipedia, cached on this phone) ---------- */
+let pics = {};
+try { pics = JSON.parse(lsGet('chill-pics')) || {}; } catch (e) {}
+const picKey = t => String(t || '').toLowerCase().replace(/[^a-z ]+/g, ' ').replace(/\s+/g, ' ').trim();
+const picStem = w => String(w).toLowerCase().replace(/[^a-z]/g, '').replace(/(ies|es|s)$/, '');
+const picAsked = new Set(); let picQ = Promise.resolve(), picTimer = null;
+async function lookupPic(title) {
+  const core = String(title).split(/\b(?:with|in|over|on)\b|&|[,(:–-]/i)[0].replace(/[^A-Za-z' ]+/g, ' ').trim().split(/\s+/).filter(Boolean);
+  if (!core.length) return null;
+  const tries = [core.join(' ')]; if (core.length > 2) tries.push(core.slice(-2).join(' '));
+  for (const q of tries) {
+    const key = picStem(q.split(' ').pop()); if (key.length < 3) continue;
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 6000);
+    let d;
+    try {
+      const r = await fetch('https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=' + encodeURIComponent(q + ' dish') + '&gsrlimit=5&prop=pageimages&piprop=thumbnail&pithumbsize=640&format=json&origin=*', { signal: ctl.signal });
+      if (!r.ok) throw new Error('lookup failed');
+      d = await r.json();
+    } finally { clearTimeout(timer); }
+    const pages = Object.values((d && d.query && d.query.pages) || {}).sort((a, b) => (a.index || 99) - (b.index || 99));
+    const hit = pages.find(pg => pg.thumbnail && /^https:\/\//.test(pg.thumbnail.source || '') && picKey(pg.title).includes(key));
+    if (hit) return hit.thumbnail.source;
+  }
+  return null;
+}
+function wantPic(title) {
+  const k = picKey(title); if (!k || picAsked.has(k)) return; picAsked.add(k);
+  picQ = picQ.then(async () => {
+    let u = null;
+    try { u = await lookupPic(title); } catch (e) { return; } // offline or blocked: try again next visit
+    pics[k] = { u, t: Date.now() };
+    const keys = Object.keys(pics); if (keys.length > 250) for (const x of keys.slice(0, keys.length - 250)) delete pics[x];
+    lsSet('chill-pics', JSON.stringify(pics));
+    if (u) { clearTimeout(picTimer); picTimer = setTimeout(() => { renderMeals(); renderPlan(); renderFavs(); }, 150); }
+  });
+}
+function picHtml(title) {
+  const k = picKey(title); if (!k) return '';
+  const c = pics[k];
+  if (c && c.u) return '<figure class="dish"><img src="' + esc(c.u) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.remove()"><figcaption>Example photo · Wikipedia</figcaption></figure>';
+  if (!c || (!c.u && Date.now() - (c.t || 0) > 6048e5)) wantPic(title);
+  return '';
+}
+
 function recipeBody(rc) {
   return '<div class="rb"><h5>Ingredients</h5><ul>' + rc.ingredients.map(x => '<li><b>' + esc(x.amount) + '</b> ' + esc(x.name) + (x.buy ? ' <em class="tag low">Buy</em>' : '') + '</li>').join('') + '</ul><h5>Steps</h5><ol>' + (rc.steps || []).map(t => '<li>' + esc(t) + '</li>').join('') + '</ol></div>';
 }
@@ -642,7 +686,7 @@ function planEntryHtml(e) {
   const head = '<div class="pe"><span class="pt">' + esc(e.title) + '</span>' + (e.sug ? '<em class="tag sug">Suggested</em>' : '') +
     '<button class="x fv" data-act="favplan" data-id="' + esc(e.id) + '" aria-pressed="' + fav + '" aria-label="' + (fav ? 'Remove from favorites' : 'Save to favorites') + '">' + (fav ? '\u2665' : '\u2661') + '</button>' +
     '<button class="x" data-act="rmplan" data-id="' + esc(e.id) + '" aria-label="Remove ' + esc(e.title) + '">&times;</button></div>';
-  if (has) return head + '<details class="pr" data-id="' + esc(e.id) + '"' + (S.opened.has(e.id) ? ' open' : '') + '><summary>' + recipeSummary(rc) + '</summary>' + recipeBody(rc) +
+  if (has) return head + '<details class="pr" data-id="' + esc(e.id) + '"' + (S.opened.has(e.id) ? ' open' : '') + '><summary>' + recipeSummary(rc) + '</summary>' + picHtml(e.title) + recipeBody(rc) +
     (buyList(rc).length ? '<button type="button" class="btn ghost" data-act="planneeds" data-id="' + esc(e.id) + '">Add what I\'m missing to the list</button>' : '') + '</details>';
   if (S.genning.has(e.id)) return head + '<div class="pr gen" role="status">Writing the recipe\u2026</div>';
   return head + '<button type="button" class="btn ghost" data-act="getrecipe" data-id="' + esc(e.id) + '">Get the recipe</button>';
@@ -682,7 +726,7 @@ function renderFavs() {
     ? '<div class="chips"><button type="button" class="chip" data-act="favready" aria-pressed="' + S.favReady + '">Can make now</button></div>' : '';
   $('#favList').innerHTML = bar + (fs.length ? fs.map(f => {
     const rc = f.recipe, has = rc && Array.isArray(rc.ingredients) && rc.ingredients.length;
-    return '<div class="card recipe"><h3>' + esc(f.title) + '</h3><div class="meta">' + (rc && rc.cuisine ? esc(rc.cuisine) + ' \u00b7 ' : '') + (rc && rc.minutes ? esc(rc.minutes) + ' min \u00b7 ' : '') + (has ? forWho(rc) + haveTag(rc) : 'Recipe is written when you plan it') + '</div>' +
+    return '<div class="card recipe">' + picHtml(f.title) + '<h3>' + esc(f.title) + '</h3><div class="meta">' + (rc && rc.cuisine ? esc(rc.cuisine) + ' \u00b7 ' : '') + (rc && rc.minutes ? esc(rc.minutes) + ' min \u00b7 ' : '') + (has ? forWho(rc) + haveTag(rc) : 'Recipe is written when you plan it') + '</div>' +
       (has ? '<details class="pr" style="margin-top:0"><summary>Recipe</summary>' + recipeBody(rc) + '</details>' : '') +
       '<div class="favact"><button type="button" class="btn" data-act="favpick" data-id="' + esc(f.id) + '">Add to plan</button><button type="button" class="btn ghost" data-act="renamefav" data-id="' + esc(f.id) + '">Rename</button><button type="button" class="btn ghost" data-act="rmfav" data-id="' + esc(f.id) + '">Remove</button></div>' +
       (S.favEdit === f.id ? '<form class="favren" data-id="' + esc(f.id) + '"><input type="text" name="t" maxlength="80" value="' + esc(f.title) + '" aria-label="Recipe name" autocomplete="off"><button type="submit">Save</button><button type="button" data-act="cancelren">Cancel</button></form>' : '') +
