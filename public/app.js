@@ -15,7 +15,7 @@ const CUISINES = ['Any', 'Italian', 'Mexican', 'Asian', 'American', 'Mediterrane
 const DIETS = ['Vegetarian', 'Vegan', 'Gluten-free', 'Dairy-free', 'Low-carb', 'Kid-friendly'];
 
 const S = { items: [], shop: [], filter: 'All', cat: 'All', q: '', addCat: 'Other', catAuto: true, addLoc: 'Fridge', qty: 1, ready: false, online: true, canWrite: true, canPhoto: true,
-  plan: [], favs: [], autoRestock: false, genning: new Set(), collapsed: new Set(), favPick: null, favEdit: null, favSlot: 'Dinner', mealView: 'plan', weekOff: 0, addSlot: null, planPick: null, planBusy: false, meals: null, house: { adults: 2, kids: 0 }, mealHouse: null, mealPrefs: '', mealNote: '', busy: false, err: '', enter: false, mealEnter: false,
+  plan: [], favs: [], autoRestock: false, genning: new Set(), opened: new Set(), favPick: null, favEdit: null, favSlot: 'Dinner', mealView: 'plan', weekOff: 0, addSlot: null, planPick: null, planBusy: false, meals: null, house: { adults: 2, kids: 0 }, mealHouse: null, mealPrefs: '', mealNote: '', busy: false, err: '', enter: false, mealEnter: false,
   cuisine: 'Any', diets: [], receipt: [], quick: new Set(), favReady: false, editId: null, expAuto: true, scanCode: null, reading: false, receiptBusy: false };
 
 function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -639,7 +639,7 @@ function planEntryHtml(e) {
   const head = '<div class="pe"><span class="pt">' + esc(e.title) + '</span>' + (e.sug ? '<em class="tag sug">Suggested</em>' : '') +
     '<button class="x fv" data-act="favplan" data-id="' + esc(e.id) + '" aria-pressed="' + fav + '" aria-label="' + (fav ? 'Remove from favorites' : 'Save to favorites') + '">' + (fav ? '\u2665' : '\u2661') + '</button>' +
     '<button class="x" data-act="rmplan" data-id="' + esc(e.id) + '" aria-label="Remove ' + esc(e.title) + '">&times;</button></div>';
-  if (has) return head + '<details class="pr" data-id="' + esc(e.id) + '"' + (S.collapsed.has(e.id) ? '' : ' open') + '><summary>' + recipeSummary(rc) + '</summary>' + recipeBody(rc) +
+  if (has) return head + '<details class="pr" data-id="' + esc(e.id) + '"' + (S.opened.has(e.id) ? ' open' : '') + '><summary>' + recipeSummary(rc) + '</summary>' + recipeBody(rc) +
     (buyList(rc).length ? '<button type="button" class="btn ghost" data-act="planneeds" data-id="' + esc(e.id) + '">Add what I\'m missing to the list</button>' : '') + '</details>';
   if (S.genning.has(e.id)) return head + '<div class="pr gen" role="status">Writing the recipe\u2026</div>';
   return head + '<button type="button" class="btn ghost" data-act="getrecipe" data-id="' + esc(e.id) + '">Get the recipe</button>';
@@ -666,7 +666,7 @@ async function genMany(ids) {
 }
 document.addEventListener('toggle', e => {
   const d = e.target; if (!d || !d.matches || !d.matches('details.pr')) return;
-  if (d.open) S.collapsed.delete(d.dataset.id); else S.collapsed.add(d.dataset.id);
+  if (d.open) S.opened.add(d.dataset.id); else S.opened.delete(d.dataset.id);
 }, true);
 
 function renderFavs() {
@@ -707,7 +707,7 @@ function renderPlan() {
       const adding = S.addSlot && S.addSlot.date === ds && S.addSlot.slot === sl;
       html += '<div class="slot"><span class="sl">' + sl + '</span><div class="sent">' + es.map(planEntryHtml).join('') +
         (adding ? '<form class="padd" data-date="' + ds + '" data-slot="' + sl + '"><input type="text" name="t" maxlength="80" placeholder="What are you making?" aria-label="' + sl + ' on ' + dayLabel(d) + '" autocomplete="off"><button type="submit">Add</button><button type="button" data-act="cancelslot">Cancel</button></form>'
-          : '<button type="button" class="addslot" data-act="addslot" data-date="' + ds + '" data-slot="' + sl + '">+ Add ' + sl.toLowerCase() + '</button>') + '</div></div>';
+          : es.length ? '' : '<button type="button" class="addslot" data-act="addslot" data-date="' + ds + '" data-slot="' + sl + '">+ Add ' + sl.toLowerCase() + '</button>') + '</div></div>';
     }
     html += '</div>';
   }
