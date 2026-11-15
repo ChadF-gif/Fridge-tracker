@@ -16,7 +16,7 @@ const DIETS = ['Vegetarian', 'Vegan', 'Gluten-free', 'Dairy-free', 'Low-carb', '
 
 const S = { items: [], shop: [], filter: 'All', cat: 'All', q: '', addCat: 'Other', catAuto: true, addLoc: 'Fridge', qty: 1, ready: false, online: true, canWrite: true, canPhoto: true,
   plan: [], favs: [], autoRestock: false, genning: new Set(), collapsed: new Set(), favPick: null, favEdit: null, favSlot: 'Dinner', mealView: 'plan', weekOff: 0, addSlot: null, planPick: null, planBusy: false, meals: null, house: { adults: 2, kids: 0 }, mealHouse: null, mealPrefs: '', mealNote: '', busy: false, err: '', enter: false, mealEnter: false,
-  cuisine: 'Any', diets: [], receipt: [], editId: null, expAuto: true, scanCode: null, reading: false, receiptBusy: false };
+  cuisine: 'Any', diets: [], receipt: [], quick: new Set(), favReady: false, editId: null, expAuto: true, scanCode: null, reading: false, receiptBusy: false };
 
 function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
@@ -285,7 +285,7 @@ function renderMeals() {
   const who = hh.adults + (hh.adults === 1 ? ' adult' : ' adults') + (hh.kids ? ' + ' + hh.kids + (hh.kids === 1 ? ' kid' : ' kids') : '');
   box.innerHTML = (S.meals || []).map((r, n) => {
     const ing = Array.isArray(r.ingredients) ? r.ingredients.filter(x => x && x.name) : [];
-    return '<div class="card recipe" style="--i:' + n + '"><h3>' + esc(r.title) + '</h3><div class="meta">' + (r.cuisine ? esc(r.cuisine) + ' · ' : '') + esc(r.minutes) + ' min · for ' + esc(who) + '</div>' +
+    return '<div class="card recipe" style="--i:' + n + '"><h3>' + esc(r.title) + '</h3><div class="meta">' + (r.cuisine ? esc(r.cuisine) + ' · ' : '') + esc(r.minutes) + ' min · for ' + esc(who) + haveTag(r) + '</div>' +
       '<h4>Ingredients</h4><ul class="ing">' + ing.map(x => '<li><b>' + esc(x.amount) + '</b><span>' + esc(x.name) + '</span>' + (x.buy ? '<em>Buy</em>' : '') + '</li>').join('') + '</ul>' +
       '<h4>Steps</h4><ol>' + (r.steps || []).map(st => '<li>' + esc(st) + '</li>').join('') + '</ol>' +
       (buyList(r).length ? '<button class="btn ghost" data-act="needs" data-n="' + n + '">Add what I\'m missing to the list</button>' : '') +
@@ -294,6 +294,27 @@ function renderMeals() {
       (S.planPick === n ? '<div class="planpick"><span class="hint" style="min-height:0">Which night?</span><div class="chips wrap">' + [0,1,2,3,4,5,6].map(k => { const d = today0(); d.setDate(d.getDate() + k); return '<button type="button" class="chip" data-act="planit" data-n="' + n + '" data-date="' + iso(d) + '">' + (k === 0 ? 'Today' : d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })) + '</button>'; }).join('') + '</div></div>' : '') + '</div>';
   }).join('');
   box.classList.toggle('enter', S.mealEnter);
+}
+
+/* ---------- quick add ---------- */
+const QUICK = [
+  ['Produce', 'Fridge', ['Apples', 'Avocados', 'Berries', 'Broccoli', 'Carrots', 'Celery', 'Cucumbers', 'Grapes', 'Lemons', 'Lettuce', 'Bell peppers', 'Spinach', 'Tomatoes', ['Bananas', 'Pantry'], ['Garlic', 'Pantry'], ['Onions', 'Pantry'], ['Potatoes', 'Pantry']]],
+  ['Protein', 'Fridge', ['Chicken breasts', 'Ground beef', 'Bacon', 'Sausage', 'Steak', 'Salmon', 'Shrimp', 'Deli meat', 'Hot dogs']],
+  ['Dairy & eggs', 'Fridge', ['Eggs', 'Milk', 'Butter', 'Cheese', 'Shredded cheese', 'Yogurt', 'Sour cream', 'Cream cheese']],
+  ['Bread & grains', 'Pantry', ['Bread', 'Tortillas', 'Bagels', 'Pasta', 'Rice', 'Cereal', 'Oats']],
+  ['Pantry & sauces', 'Pantry', ['Ketchup', 'Mustard', 'Mayo', 'Peanut butter', 'Jelly', 'Soy sauce', 'Hot sauce', 'BBQ sauce', 'Salsa', 'Canned beans', 'Canned tomatoes', 'Chicken broth', 'Olive oil', 'Flour', 'Sugar']],
+  ['Drinks & snacks', 'Pantry', ['Juice', 'Soda', 'Chips', 'Crackers']],
+  ['Freezer', 'Freezer', ['Ice cream', 'Frozen pizza', 'Frozen vegetables', 'Chicken nuggets', 'Frozen fruit']]
+];
+const quickItems = () => QUICK.flatMap(([g, loc, names]) => names.map(n => Array.isArray(n) ? { name: n[0], loc: n[1] } : { name: n, loc }));
+function renderQuick() {
+  const have = stockWords(), n = S.quick.size;
+  $('#quickBody').innerHTML = '<p class="hint" style="min-height:0">Tap everything you have, then add them all at once. Dates are estimates, so you can fix any later.</p>' +
+    QUICK.map(([g, loc, names]) => '<h5>' + esc(g) + '</h5><div class="chips wrap">' + names.map(x => {
+      const nm = Array.isArray(x) ? x[0] : x;
+      return '<button type="button" class="chip' + (owned({ name: nm }, have) ? ' have' : '') + '" data-q="' + esc(nm) + '" aria-pressed="' + S.quick.has(nm) + '">' + esc(nm) + '</button>';
+    }).join('') + '</div>').join('') +
+    '<button type="button" class="btn" data-act="quickadd"' + (n ? '' : ' disabled') + '>' + (n ? 'Add ' + n + (n === 1 ? ' item' : ' items') : 'Pick some items') + '</button>';
 }
 
 function renderAdd() {
@@ -306,7 +327,7 @@ function renderAdd() {
   $('#scanBtn').hidden = !!S.editId;
   $('#photoBtn').hidden = !S.canPhoto || !!S.editId;
   $('#photoBtn').disabled = S.reading;
-  renderReceipt();
+  renderReceipt(); renderQuick();
 }
 
 function renderSync() {
@@ -558,15 +579,26 @@ $('#mealBtn').addEventListener('click', async () => {
 });
 
 /* ---------- recipe from a photo ---------- */
-const STAPLE = /^(salt|pepper|black pepper|kosher salt|water|oil|olive oil|vegetable oil|cooking spray|sugar|flour|ice)\b/i;
+const STAPLE = /^(salt|pepper|black pepper|kosher salt|sea salt|water|oil|olive oil|vegetable oil|canola oil|cooking spray|sugar|flour|ice|paprika|smoked paprika|cumin|oregano|thyme|chili powder|garlic powder|onion powder|cayenne|cinnamon|italian seasoning|cajun seasoning|creole seasoning|red pepper flakes|bay leaf|bay leaves)\b/i;
 const words = n => String(n).toLowerCase().split(/[^a-z]+/).filter(w => w.length >= 4).map(w => w.replace(/(ies|es|s)$/, ''));
+const stockWords = () => S.items.filter(i => i.exp && daysLeft(i.exp) >= 0).map(i => words(i.name));
+const isStaple = x => STAPLE.test(String(x.name).trim());
+const sameWord = (a, b) => a === b || a.includes(b) || b.includes(a);
+// An ingredient is on hand when every word of the fridge item is in it, or every word of it is in the fridge item.
+const owned = (x, have) => { const w = words(x.name); return !!w.length && have.some(h => h.length && (h.every(a => w.some(b => sameWord(a, b))) || w.every(b => h.some(a => sameWord(a, b))))); };
 function markBuy(rc) {
-  const have = S.items.filter(i => i.exp && daysLeft(i.exp) >= 0).map(i => words(i.name));
-  return Object.assign({}, rc, { ingredients: rc.ingredients.map(x => {
-    const w = words(x.name);
-    const got = STAPLE.test(String(x.name).trim()) || have.some(h => h.some(a => w.some(b => a === b || a.includes(b) || b.includes(a))));
-    return Object.assign({}, x, { buy: !got });
-  }) });
+  const have = stockWords();
+  return Object.assign({}, rc, { ingredients: rc.ingredients.map(x => Object.assign({}, x, { buy: !(isStaple(x) || owned(x, have)) })) });
+}
+// How many of a recipe's real ingredients are already in the fridge (salt, oil and common spices are ignored).
+function haveCount(rc) {
+  const have = stockWords(); let got = 0, tot = 0;
+  for (const x of (rc && Array.isArray(rc.ingredients) ? rc.ingredients : [])) { if (!x || !x.name || isStaple(x)) continue; tot++; if (owned(x, have)) got++; }
+  return { got, tot };
+}
+function haveTag(rc) {
+  const { got, tot } = haveCount(rc); if (!tot) return '';
+  return '<span class="tag have' + (got === tot ? ' all' : '') + '">' + (got === tot ? 'You have everything' : 'You have ' + got + ' of ' + tot) + '</span>';
 }
 $('#favPhotoBtn').addEventListener('click', () => $('#favPhoto').click());
 $('#favPhoto').addEventListener('change', async e => {
@@ -601,7 +633,7 @@ function forWho(rc) { return rc && !rc.adults && rc.serving ? 'makes ' + rc.serv
 function recipeBody(rc) {
   return '<div class="rb"><h5>Ingredients</h5><ul>' + rc.ingredients.map(x => '<li><b>' + esc(x.amount) + '</b> ' + esc(x.name) + (x.buy ? ' <em class="tag low">Buy</em>' : '') + '</li>').join('') + '</ul><h5>Steps</h5><ol>' + (rc.steps || []).map(t => '<li>' + esc(t) + '</li>').join('') + '</ol></div>';
 }
-function recipeSummary(rc) { return 'Recipe' + (rc.minutes ? ' \u00b7 ' + esc(rc.minutes) + ' min' : '') + (forWho(rc) ? ' \u00b7 ' + forWho(rc) : ''); }
+function recipeSummary(rc) { return 'Recipe' + (rc.minutes ? ' \u00b7 ' + esc(rc.minutes) + ' min' : '') + (forWho(rc) ? ' \u00b7 ' + forWho(rc) : '') + haveTag(rc); }
 function planEntryHtml(e) {
   const rc = e.recipe, has = rc && Array.isArray(rc.ingredients) && rc.ingredients.length, fav = isFav(e.title);
   const head = '<div class="pe"><span class="pt">' + esc(e.title) + '</span>' + (e.sug ? '<em class="tag sug">Suggested</em>' : '') +
@@ -640,16 +672,20 @@ document.addEventListener('toggle', e => {
 function renderFavs() {
   const on = S.mealView === 'favs'; $('#mealFavs').hidden = !on; if (!on) return;
   const week = [0,1,2,3,4,5,6].map(k => { const d = today0(); d.setDate(d.getDate() + k); return d; });
-  const fs = S.favs.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0));
-  $('#favList').innerHTML = fs.length ? fs.map(f => {
+  const all = S.favs.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  const ready = f => { const c = haveCount(f.recipe); return c.tot > 0 && c.got === c.tot; };
+  const fs = S.favReady ? all.filter(ready) : all;
+  const bar = all.some(f => f.recipe && Array.isArray(f.recipe.ingredients) && f.recipe.ingredients.length)
+    ? '<div class="chips"><button type="button" class="chip" data-act="favready" aria-pressed="' + S.favReady + '">Can make now</button></div>' : '';
+  $('#favList').innerHTML = bar + (fs.length ? fs.map(f => {
     const rc = f.recipe, has = rc && Array.isArray(rc.ingredients) && rc.ingredients.length;
-    return '<div class="card recipe"><h3>' + esc(f.title) + '</h3><div class="meta">' + (rc && rc.cuisine ? esc(rc.cuisine) + ' \u00b7 ' : '') + (rc && rc.minutes ? esc(rc.minutes) + ' min \u00b7 ' : '') + (has ? forWho(rc) : 'Recipe is written when you plan it') + '</div>' +
+    return '<div class="card recipe"><h3>' + esc(f.title) + '</h3><div class="meta">' + (rc && rc.cuisine ? esc(rc.cuisine) + ' \u00b7 ' : '') + (rc && rc.minutes ? esc(rc.minutes) + ' min \u00b7 ' : '') + (has ? forWho(rc) + haveTag(rc) : 'Recipe is written when you plan it') + '</div>' +
       (has ? '<details class="pr" style="margin-top:0"><summary>Recipe</summary>' + recipeBody(rc) + '</details>' : '') +
       '<div class="favact"><button type="button" class="btn" data-act="favpick" data-id="' + esc(f.id) + '">Add to plan</button><button type="button" class="btn ghost" data-act="renamefav" data-id="' + esc(f.id) + '">Rename</button><button type="button" class="btn ghost" data-act="rmfav" data-id="' + esc(f.id) + '">Remove</button></div>' +
       (S.favEdit === f.id ? '<form class="favren" data-id="' + esc(f.id) + '"><input type="text" name="t" maxlength="80" value="' + esc(f.title) + '" aria-label="Recipe name" autocomplete="off"><button type="submit">Save</button><button type="button" data-act="cancelren">Cancel</button></form>' : '') +
       (S.favPick === f.id ? '<div class="planpick"><span class="hint" style="min-height:0">Which meal?</span><div class="chips wrap">' + SLOTS.map(sl => '<button type="button" class="chip" data-act="favslot" data-slot="' + sl + '" aria-pressed="' + (S.favSlot === sl) + '">' + sl + '</button>').join('') + '</div><span class="hint" style="min-height:0">Which day?</span><div class="chips wrap">' +
         week.map((d, k) => '<button type="button" class="chip" data-act="favdate" data-id="' + esc(f.id) + '" data-date="' + iso(d) + '">' + (k === 0 ? 'Today' : d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })) + '</button>').join('') + '</div></div>' : '') + '</div>';
-  }).join('') : '<div class="empty"><span>No favorites yet. Tap the heart on a planned meal, or Save to favorites on any suggestion.</span></div>';
+  }).join('') : '<div class="empty"><span>' + (S.favReady ? 'Nothing you can make with what is in the fridge right now.' : 'No favorites yet. Tap the heart on a planned meal, or Save to favorites on any suggestion.') + '</span></div>');
 }
 function renderPlan() {
   const on = S.mealView === 'plan';
@@ -776,6 +812,7 @@ document.addEventListener('click', async e => {
   if (el.dataset.filter) { S.filter = el.dataset.filter; return renderFridge(); }
   if (el.dataset.mview) { S.mealView = el.dataset.mview; return render(); }
   if (el.dataset.cat) { S.cat = el.dataset.cat; return renderFridge(); }
+  if (el.dataset.q) { S.quick.has(el.dataset.q) ? S.quick.delete(el.dataset.q) : S.quick.add(el.dataset.q); return renderQuick(); }
   if (el.dataset.addcat) { S.addCat = el.dataset.addcat; S.catAuto = false; return renderAdd(); }
   if (el.dataset.loc) { S.addLoc = el.dataset.loc; suggestExp(); return renderAdd(); }
   if (el.dataset.cuisine) { S.cuisine = el.dataset.cuisine; savePrefs(); return renderMeals(); }
@@ -812,6 +849,7 @@ document.addEventListener('click', async e => {
       if (ex) { await act(() => api.removeFav(ex.id), 'Removed from favorites'); break; }
       await act(() => api.addFav({ title: String(r.title).slice(0, 80), recipe: recipeFrom(r, S.mealHouse || S.house) }), 'Saved to favorites'); renderMeals(); break;
     }
+    case 'favready': S.favReady = !S.favReady; renderFavs(); break;
     case 'renamefav': S.favEdit = S.favEdit === id ? null : id; renderFavs(); { const i = document.querySelector('form.favren input'); if (i) { i.focus(); i.select(); } } break;
     case 'cancelren': S.favEdit = null; renderFavs(); break;
     case 'rmfav': await act(() => api.removeFav(id)); break;
@@ -840,6 +878,16 @@ document.addEventListener('click', async e => {
       break;
     }
     case 'canceledit': endEdit(); setTab('fridge'); break;
+    case 'quickadd': {
+      const picks = quickItems().filter(x => S.quick.has(x.name)); let done = 0;
+      for (const x of picks) {
+        const days = shelfLife(x.name, x.loc) || (x.loc === 'Pantry' ? 180 : 7);
+        if (await act(() => api.addItem({ name: x.name, loc: x.loc, exp: plus(days), qty: 1, cat: guessCat(x.name) }))) { done++; S.quick.delete(x.name); } else break;
+      }
+      renderQuick();
+      if (done && done === picks.length) { toast(done + (done === 1 ? ' item' : ' items') + ' added'); document.querySelector('#quickCard').open = false; setTab('fridge'); }
+      break;
+    }
     case 'receiptadd': {
       const picks = S.receipt.filter(x => x.on), added = [];
       for (const x of picks) { if (await act(() => api.addItem({ name: x.name, loc: x.loc, exp: x.exp, qty: x.qty, cat: guessCat(x.name) }))) added.push(x); else break; }

@@ -267,3 +267,14 @@ form.favren input{flex:1 1 140px;min-width:0;box-sizing:border-box;min-height:44
 form.favren button{border:0;border-radius:12px;padding:0 14px;min-height:44px;font-weight:700;background:var(--grad);color:var(--accent-ink)}
 form.favren button[type=button]{background:var(--surface2);color:var(--ink)}
 #favName{width:100%;box-sizing:border-box;min-height:48px;padding:12px 14px;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:14px;margin-top:6px}
+
+.tag.have{background:var(--surface);border:1px solid var(--line);color:var(--mute)}
+.tag.have.all{background:var(--accent);border-color:var(--accent);color:#fff}
+#quickCard{background:var(--surface);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow)}
+#quickCard>summary{cursor:pointer;list-style:none;padding:16px 18px;font-weight:700;display:flex;justify-content:space-between;align-items:center}
+#quickCard>summary::-webkit-details-marker{display:none}
+#quickCard>summary::after{content:'+';color:var(--accent);font-size:24px;line-height:1;font-weight:500}
+#quickCard[open]>summary::after{content:'\2212'}
+#quickBody{display:flex;flex-direction:column;gap:10px;padding:0 18px 18px}
+#quickBody h5{margin:6px 0 0;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--mute);font-weight:600}
+#quickBody .chip.have{opacity:.55}
